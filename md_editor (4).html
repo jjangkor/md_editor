@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JJANG's MD Editor</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- FontAwesome CDN for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+          integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+          crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <!-- Marked.js for Markdown Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+
+    <!-- html2pdf.js for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
+            integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg=="
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <!-- KaTeX for Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+          integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV"
+          crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"
+            integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8"
+            crossorigin="anonymous"></script>
+
+    <style>
+        /* 전체 레이아웃을 위한 기본 스타일 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* 에디터 textarea 스타일 */
+        #editor {
+            resize: none;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-y: auto;
+        }
+
+        #editor:focus {
+            outline: none;
+        }
+
+        /* 프리뷰 영역 스크롤 */
+        #preview {
+            overflow-y: auto;
+        }
+
+        /* Tailwind Typography 플러그인 스타일을 CDN으로 불러오기 위한 대체 */
+        .prose {
+            max-width: 100%;
+            color: #374151;
+        }
+
+        .prose h1 {
+            font-size: 2.25em;
+            margin-top: 0;
+            margin-bottom: 0.8888889em;
+            line-height: 1.1111111;
+            font-weight: 800;
+        }
+
+        .prose h2 {
+            font-size: 1.5em;
+            margin-top: 2em;
+            margin-bottom: 1em;
+            line-height: 1.3333333;
+            font-weight: 700;
+        }
+
+        .prose h3 {
+            font-size: 1.25em;
+            margin-top: 1.6em;
+            margin-bottom: 0.6em;
+            line-height: 1.6;
+            font-weight: 600;
+        }
+
+        .prose p {
+            margin-top: 1.25em;
+            margin-bottom: 1.25em;
+        }
+
+        .prose ul, .prose ol {
+            margin-top: 1.25em;
+            margin-bottom: 1.25em;
+            padding-left: 1.625em;
+        }
+
+        /* 불릿 리스트 스타일: 1단계 □, 2단계 ○, 3단계 ● */
+        .prose ul {
+            list-style-type: square;
+        }
+
+        .prose ul > li {
+            display: list-item;
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+        }
+
+        .prose ul ul {
+            list-style-type: circle;
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+        }
+
+        .prose ul ul ul {
+            list-style-type: disc;
+        }
+
+        /* 순서 리스트: 계층적 번호 (1, 1.1, 1.1.1) */
+        .prose ol {
+            counter-reset: item;
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .prose ol > li {
+            counter-increment: item;
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+            padding-left: 2.5em;
+            position: relative;
+        }
+
+        .prose ol > li::before {
+            content: counters(item, ".") ". ";
+            position: absolute;
+            left: 0;
+            width: 2.5em;
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .prose ol ol {
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+            padding-left: 0;
+        }
+
+        .prose code {
+            background-color: #f3f4f6;
+            padding: 0.2em 0.4em;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+            font-family: 'Courier New', monospace;
+        }
+
+        .prose pre {
+            background-color: #1f2937;
+            color: #f9fafb;
+            overflow-x: auto;
+            padding: 1em;
+            border-radius: 0.375rem;
+            margin-top: 1.7142857em;
+            margin-bottom: 1.7142857em;
+        }
+
+        .prose pre code {
+            background-color: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: inherit;
+        }
+
+        .prose blockquote {
+            font-weight: 500;
+            font-style: italic;
+            color: #111827;
+            border-left-width: 0.25rem;
+            border-left-color: #e5e7eb;
+            quotes: "\201C""\201D""\2018""\2019";
+            margin-top: 1.6em;
+            margin-bottom: 1.6em;
+            padding-left: 1em;
+        }
+
+        .prose strong {
+            font-weight: 600;
+        }
+
+        .prose em {
+            font-style: italic;
+        }
+
+        .prose del,
+        .prose s {
+            text-decoration: line-through;
+        }
+
+        /* 버튼 호버 효과 */
+        .btn-toolbar:hover {
+            background-color: #e5e7eb;
+        }
+
+        .btn-toolbar:active {
+            background-color: #d1d5db;
+        }
+
+        /* 로딩 인디케이터 */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        /* 리사이저 스타일 */
+        .resizer {
+            width: 5px;
+            background-color: #d1d5db;
+            cursor: col-resize;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .resizer:hover {
+            background-color: #9ca3af;
+        }
+
+        .resizer:active {
+            background-color: #6b7280;
+        }
+
+        /* 비활성화된 버튼 스타일 */
+        .btn-toolbar:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-toolbar:disabled:hover {
+            background-color: transparent;
+        }
+
+        /* 드래그 앤 드롭 스타일 */
+        .drag-over {
+            background-color: #e0f2fe !important;
+            border: 2px dashed #0284c7 !important;
+        }
+
+        /* 파일 입력 숨김 */
+        #fileInput {
+            display: none;
+        }
+
+        /* 파일명 표시 */
+        .filename-display {
+            font-size: 0.875rem;
+            color: #d1d5db;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 수식 스타일 */
+        .math-block {
+            margin: 1em 0;
+            overflow-x: auto;
+            text-align: center;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .math-inline {
+            display: inline;
+        }
+
+        /* 테이블 스타일 (PDF 호환) */
+        .prose table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+
+        .prose th, .prose td {
+            border: 1px solid #d1d5db;
+            padding: 0.5em 1em;
+            text-align: left;
+        }
+
+        .prose th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+        }
+
+        /* 코드 블록 페이지 분할 방지 */
+        .prose pre {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        /* PDF 페이지 나누기 방지 - 텍스트 요소 */
+        .prose p,
+        .prose li,
+        .prose h1,
+        .prose h2,
+        .prose h3,
+        .prose h4,
+        .prose h5,
+        .prose h6,
+        .prose blockquote,
+        .prose table {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .prose ul,
+        .prose ol {
+            page-break-inside: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- 전체 컨테이너: 100vh 고정 레이아웃 -->
+    <div class="h-screen flex flex-col">
+
+        <!-- 헤더 -->
+        <header class="bg-gray-800 text-white px-6 py-4 flex items-center justify-between shadow-lg">
+            <div class="flex items-center space-x-4">
+                <i class="fas fa-markdown text-3xl"></i>
+                <div>
+                    <h1 class="text-2xl font-bold">JJANG's MD Editor</h1>
+                    <div id="filenameDisplay" class="filename-display">untitled.md</div>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <input type="file" id="fileInput" accept=".md,.markdown,.txt" />
+                <button id="openFileBtn"
+                        class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                        title="마크다운 파일 열기">
+                    <i class="fas fa-folder-open"></i>
+                    <span>파일 열기</span>
+                </button>
+                <button id="saveMarkdownBtn"
+                        class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                        title="마크다운 파일로 저장">
+                    <i class="fas fa-save"></i>
+                    <span>MD 저장</span>
+                </button>
+                <button id="exportPdfBtn"
+                        class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                        title="PDF로 내보내기">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>PDF</span>
+                </button>
+                <button id="exportWordBtn"
+                        class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                        title="Word로 내보내기">
+                    <i class="fas fa-file-word"></i>
+                    <span>Word</span>
+                </button>
+                <button id="exportHwpxBtn"
+                        class="bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                        title="HWPX 변환용 마크다운 저장 (pypandoc-hwpx 사용)">
+                    <i class="fas fa-file-archive"></i>
+                    <span>HWPX</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 툴바 -->
+        <div class="bg-gray-200 px-6 py-3 flex items-center space-x-2 border-b border-gray-300">
+            <button id="undoBtn" class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    title="되돌리기 (Ctrl+Z)"
+                    disabled>
+                <i class="fas fa-undo"></i>
+            </button>
+            <button id="redoBtn" class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    title="다시실행 (Ctrl+Y)"
+                    disabled>
+                <i class="fas fa-redo"></i>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="bold"
+                    title="굵게 (Ctrl+B)">
+                <i class="fas fa-bold"></i>
+            </button>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="italic"
+                    title="기울임 (Ctrl+I)">
+                <i class="fas fa-italic"></i>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="h1"
+                    title="제목 1">
+                <i class="fas fa-heading"></i><span class="text-xs ml-1">1</span>
+            </button>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="h2"
+                    title="제목 2">
+                <i class="fas fa-heading"></i><span class="text-xs ml-1">2</span>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="ul"
+                    title="순서 없는 목록">
+                <i class="fas fa-list-ul"></i>
+            </button>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="ol"
+                    title="순서 있는 목록">
+                <i class="fas fa-list-ol"></i>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="code"
+                    title="코드 블록">
+                <i class="fas fa-code"></i>
+            </button>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="quote"
+                    title="인용구">
+                <i class="fas fa-quote-left"></i>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="toc"
+                    title="목차 삽입">
+                <i class="fas fa-list-alt"></i>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    data-action="math"
+                    title="수식 삽입">
+                <i class="fas fa-square-root-alt"></i>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button id="findBtn" class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    title="찾기 (Ctrl+F)">
+                <i class="fas fa-search"></i>
+            </button>
+            <button id="replaceBtn" class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    title="찾아 바꾸기 (Ctrl+H)">
+                <i class="fas fa-exchange-alt"></i>
+            </button>
+            <div class="w-px h-6 bg-gray-400"></div>
+            <button id="toggleTocBtn" class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
+                    title="목차 패널 표시/숨김">
+                <i class="fas fa-bars"></i>
+                <span class="ml-1 text-xs">TOC</span>
+            </button>
+            <button id="toggleSyncBtn" class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors bg-green-100"
+                    title="스크롤 동기화 ON/OFF">
+                <i class="fas fa-link"></i>
+                <span class="ml-1 text-xs">Sync</span>
+            </button>
+        </div>
+
+        <!-- 찾기/바꾸기 패널 -->
+        <div id="findReplacePanel" class="bg-gray-100 border-b border-gray-300 px-6 py-3" style="display: none;">
+            <div class="flex flex-col space-y-2">
+                <!-- 찾기 행 -->
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm text-gray-700 w-16">찾기:</label>
+                    <input type="text" id="findInput"
+                           class="flex-1 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="검색어 입력">
+                    <button id="findPrevBtn" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+                            title="이전 찾기">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                    <button id="findNextBtn" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+                            title="다음 찾기">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <span id="findCount" class="text-sm text-gray-600 min-w-[80px]">0개 찾음</span>
+                    <button id="closeFindBtn" class="px-2 py-1.5 text-gray-500 hover:text-gray-700 transition-colors"
+                            title="닫기">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <!-- 바꾸기 행 -->
+                <div id="replaceRow" class="flex items-center space-x-2" style="display: none;">
+                    <label class="text-sm text-gray-700 w-16">바꾸기:</label>
+                    <input type="text" id="replaceInput"
+                           class="flex-1 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="바꿀 내용 입력">
+                    <button id="replaceOneBtn" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                            title="바꾸기">
+                        바꾸기
+                    </button>
+                    <button id="replaceAllBtn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                            title="모두 바꾸기">
+                        모두 바꾸기
+                    </button>
+                    <div class="min-w-[80px]"></div>
+                    <div class="px-2 py-1.5"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 메인 영역: 크기 조절 가능한 분할 -->
+        <main class="flex-1 flex overflow-hidden">
+            <!-- 왼쪽: 에디터 영역 -->
+            <div id="editorPanel" class="bg-gray-50 flex flex-col" style="flex: 1.2;">
+                <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
+                    <i class="fas fa-edit mr-2"></i>Editor
+                </div>
+                <textarea id="editor"
+                          class="flex-1 w-full p-6 bg-gray-50 text-gray-800 border-none"
+                          placeholder="여기에 마크다운을 입력하세요..."
+                          spellcheck="false"></textarea>
+            </div>
+
+            <!-- 리사이저 -->
+            <div id="resizer" class="resizer"></div>
+
+            <!-- 오른쪽: 프리뷰 영역 -->
+            <div id="previewPanel" class="bg-white flex flex-col" style="flex: 0.8;">
+                <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
+                    <i class="fas fa-eye mr-2"></i>Preview
+                </div>
+                <div id="preview"
+                     class="flex-1 p-6 prose overflow-y-auto">
+                    <!-- 마크다운 프리뷰가 여기에 렌더링됩니다 -->
+                </div>
+            </div>
+
+            <!-- 목차 패널 (기본 숨김) -->
+            <div id="tocPanel" class="bg-gray-50 border-l border-gray-300" style="width: 250px; display: none; flex-direction: column;">
+                <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
+                    <i class="fas fa-list mr-2"></i>목차 (TOC)
+                </div>
+                <div id="tocContent" class="flex-1 p-4 overflow-y-auto text-sm">
+                    <!-- 목차 리스트가 여기에 렌더링됩니다 -->
+                    <p class="text-gray-500 text-xs">헤딩이 있는 문서를 작성하면 목차가 자동으로 생성됩니다.</p>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        /**
+         * JJANG's MD Editor
+         * 모든 기능이 포함된 단일 파일 마크다운 에디터
+         */
+
+        // DOM 요소 참조
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const exportPdfBtn = document.getElementById('exportPdfBtn');
+        const exportWordBtn = document.getElementById('exportWordBtn');
+        const exportHwpxBtn = document.getElementById('exportHwpxBtn');
+        const toolbarButtons = document.querySelectorAll('.btn-toolbar');
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        const resizer = document.getElementById('resizer');
+        const editorPanel = document.getElementById('editorPanel');
+        const previewPanel = document.getElementById('previewPanel');
+        const fileInput = document.getElementById('fileInput');
+        const openFileBtn = document.getElementById('openFileBtn');
+        const saveMarkdownBtn = document.getElementById('saveMarkdownBtn');
+        const filenameDisplay = document.getElementById('filenameDisplay');
+        const tocPanel = document.getElementById('tocPanel');
+        const tocContent = document.getElementById('tocContent');
+        const toggleTocBtn = document.getElementById('toggleTocBtn');
+        const toggleSyncBtn = document.getElementById('toggleSyncBtn');
+        const findBtn = document.getElementById('findBtn');
+        const replaceBtn = document.getElementById('replaceBtn');
+        const findReplacePanel = document.getElementById('findReplacePanel');
+        const findInput = document.getElementById('findInput');
+        const replaceInput = document.getElementById('replaceInput');
+        const replaceRow = document.getElementById('replaceRow');
+        const findPrevBtn = document.getElementById('findPrevBtn');
+        const findNextBtn = document.getElementById('findNextBtn');
+        const closeFindBtn = document.getElementById('closeFindBtn');
+        const findCount = document.getElementById('findCount');
+        const replaceOneBtn = document.getElementById('replaceOneBtn');
+        const replaceAllBtn = document.getElementById('replaceAllBtn');
+
+        // 히스토리 관리 (Undo/Redo)
+        let history = [];
+        let historyIndex = -1;
+        let isRestoringState = false;
+
+        // 현재 파일명
+        let currentFilename = 'untitled.md';
+
+        // 스크롤 동기화 상태
+        let isSyncEnabled = true;
+        let isSyncingScroll = false;
+
+        // TOC 패널 표시 상태
+        let isTocVisible = false;
+
+        // 찾기/바꾸기 상태
+        let findMatches = [];
+        let currentMatchIndex = -1;
+
+        // 초기 데모 텍스트
+        const initialText = `# 환영합니다! JJANG's MD Editor에 오신 것을 환영합니다 👋
+
+## 주요 기능
+
+이 에디터는 다음과 같은 기능을 제공합니다:
+
+- **실시간 미리보기**: 왼쪽에 입력하면 오른쪽에 즉시 렌더링됩니다
+- **자동 목차 생성**: 툴바의 목차 버튼을 클릭하면 자동으로 목차가 생성됩니다
+- **수학 수식 지원**: LaTeX 문법으로 수식을 작성하고 KaTeX로 렌더링됩니다
+- **스크롤 동기화**: 왼쪽/오른쪽 창의 스크롤이 자동으로 동기화됩니다
+- **강력한 툴바**: 마크다운 문법을 쉽게 삽입할 수 있습니다
+- **PDF 내보내기**: 작성한 문서를 PDF로 저장할 수 있습니다
+- **Word 내보내기**: .doc 파일로도 저장 가능합니다
+
+## 마크다운 문법 예제
+
+### 텍스트 스타일
+
+**굵은 텍스트**는 별표 두 개로 감싸면 됩니다.
+*기울임 텍스트*는 별표 하나로 감싸면 됩니다.
+~~취소선 텍스트~~는 물결표 두 개로 감싸면 됩니다.
+
+### 목록
+
+순서 없는 목록:
+- 항목 1
+- 항목 2
+  - 하위 항목 2.1
+  - 하위 항목 2.2
+- 항목 3
+
+순서 있는 목록:
+1. 첫 번째
+2. 두 번째
+3. 세 번째
+
+### 코드
+
+인라인 코드: \`const hello = "world";\`
+
+코드 블록:
+\`\`\`javascript
+function greet(name) {
+    return \`Hello, \${name}!\`;
+}
+
+console.log(greet("Markdown"));
+\`\`\`
+
+### 인용구
+
+> "훌륭한 소프트웨어는 훌륭한 도구에서 시작됩니다."
+> - 익명
+
+### 수학 수식 (KaTeX)
+
+인라인 수식: 질량-에너지 등가 원리는 $E = mc^2$ 입니다.
+
+복잡한 수식 (줄바꿈 지원):
+$ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} $
+
+이차방정식의 해:
+$ x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} $
+
+### 링크와 이미지
+
+[마크다운 가이드](https://www.markdownguide.org/)
+
+---
+
+## 시작하기
+
+지금 바로 왼쪽 에디터에서 이 텍스트를 수정해보세요!
+툴바의 버튼들을 클릭하여 마크다운 문법을 쉽게 삽입할 수 있습니다.
+
+완성된 문서는 상단의 **PDF 내보내기** 또는 **Word 내보내기** 버튼을 클릭하여 저장하세요.
+
+Happy Writing! ✍️`;
+
+        /**
+         * 히스토리에 현재 상태 저장
+         */
+        function saveToHistory() {
+            if (isRestoringState) return;
+
+            const currentState = {
+                text: editor.value,
+                selectionStart: editor.selectionStart,
+                selectionEnd: editor.selectionEnd
+            };
+
+            // 현재 인덱스 이후의 히스토리 제거
+            history = history.slice(0, historyIndex + 1);
+
+            // 새로운 상태 추가
+            history.push(currentState);
+            historyIndex++;
+
+            // 히스토리 크기 제한 (최대 100개)
+            if (history.length > 100) {
+                history.shift();
+                historyIndex--;
+            }
+
+            updateUndoRedoButtons();
+        }
+
+        /**
+         * Undo/Redo 버튼 상태 업데이트
+         */
+        function updateUndoRedoButtons() {
+            undoBtn.disabled = historyIndex <= 0;
+            redoBtn.disabled = historyIndex >= history.length - 1;
+        }
+
+        /**
+         * 되돌리기 (Undo)
+         */
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                restoreState(history[historyIndex]);
+            }
+        }
+
+        /**
+         * 다시실행 (Redo)
+         */
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                restoreState(history[historyIndex]);
+            }
+        }
+
+        /**
+         * 상태 복원
+         */
+        function restoreState(state) {
+            isRestoringState = true;
+            editor.value = state.text;
+            editor.selectionStart = state.selectionStart;
+            editor.selectionEnd = state.selectionEnd;
+            updatePreview();
+            updateUndoRedoButtons();
+            isRestoringState = false;
+        }
+
+        /**
+         * 초기화 함수
+         * CDN 라이브러리 로드 확인 및 에러 처리
+         */
+        function initialize() {
+            try {
+                // Marked.js 로드 확인
+                if (typeof marked === 'undefined') {
+                    throw new Error('Marked.js 라이브러리를 로드할 수 없습니다.');
+                }
+
+                // html2pdf.js 로드 확인
+                if (typeof html2pdf === 'undefined') {
+                    throw new Error('html2pdf.js 라이브러리를 로드할 수 없습니다.');
+                }
+
+                // Marked.js 옵션 설정
+                marked.setOptions({
+                    breaks: true,  // 줄바꿈을 <br>로 변환
+                    gfm: true,     // GitHub Flavored Markdown 활성화
+                    headerIds: true,
+                    mangle: false,
+                    sanitize: false,  // HTML 태그 허용
+                    smartLists: true,
+                    smartypants: false
+                });
+
+                // 초기 텍스트 설정 및 렌더링
+                editor.value = initialText;
+                updatePreview();
+
+                // 초기 상태를 히스토리에 저장
+                saveToHistory();
+
+                // 드래그 앤 드롭 설정
+                setupDragAndDrop();
+
+                console.log('✅ Markdown Editor 초기화 완료');
+
+            } catch (error) {
+                console.error('❌ 초기화 오류:', error);
+                alert('에디터 초기화 중 오류가 발생했습니다:\n' + error.message);
+            }
+        }
+
+        /**
+         * 목차(TOC) 생성
+         * 코드 블록 내부의 TOC 주석과 헤딩은 무시
+         */
+        function generateTOC(markdownText) {
+            // 코드 블록을 먼저 플레이스홀더로 치환
+            const codeBlocks = [];
+            let codeBlockIndex = 0;
+            let textWithoutCode = markdownText;
+
+            // 백틱 코드 블록 추출 (```...```)
+            textWithoutCode = textWithoutCode.replace(/```[\s\S]*?```/g, (match) => {
+                const placeholder = `___TOC_CODE_BLOCK_${codeBlockIndex}___`;
+                codeBlocks.push({ placeholder, content: match });
+                codeBlockIndex++;
+                return placeholder;
+            });
+
+            // 인라인 코드 추출 (`...`)
+            textWithoutCode = textWithoutCode.replace(/`[^`\n]+?`/g, (match) => {
+                const placeholder = `___TOC_INLINE_CODE_${codeBlockIndex}___`;
+                codeBlocks.push({ placeholder, content: match });
+                codeBlockIndex++;
+                return placeholder;
+            });
+
+            // 코드 블록이 제거된 텍스트에서 TOC 주석 찾기
+            const tocRegex = /<!--\s*TOC\s*-->([\s\S]*?)<!--\s*\/TOC\s*-->/i;
+
+            // TOC 주석이 없으면 코드 블록 복원 후 반환
+            if (!tocRegex.test(textWithoutCode)) {
+                // 코드 블록 복원
+                codeBlocks.forEach(({ placeholder, content }) => {
+                    textWithoutCode = textWithoutCode.replace(placeholder, content);
+                });
+                return textWithoutCode;
+            }
+
+            // 헤딩 추출 (코드 블록이 제거된 텍스트에서)
+            const headings = [];
+            const lines = textWithoutCode.split('\n');
+
+            lines.forEach((line, index) => {
+                const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+                if (headingMatch) {
+                    const level = headingMatch[1].length;
+                    const text = headingMatch[2].trim();
+                    const id = text.toLowerCase()
+                        .replace(/[^\w\s가-힣-]/g, '')
+                        .replace(/\s+/g, '-');
+
+                    headings.push({ level, text, id });
+                }
+            });
+
+            // TOC HTML 생성
+            let tocHtml = '\n';
+            headings.forEach(heading => {
+                const indent = '  '.repeat(heading.level - 1);
+                tocHtml += `${indent}- [${heading.text}](#${heading.id})\n`;
+            });
+
+            // TOC 주석 사이에 목차 삽입 (코드 블록이 제거된 텍스트에서)
+            let result = textWithoutCode.replace(tocRegex, `<!-- TOC -->${tocHtml}<!-- /TOC -->`);
+
+            // 코드 블록 복원
+            codeBlocks.forEach(({ placeholder, content }) => {
+                result = result.replace(placeholder, content);
+            });
+
+            return result;
+        }
+
+        /**
+         * 수식 렌더링 (KaTeX)
+         * 플레이스홀더 방식으로 처리
+         */
+        function processMath(markdownText) {
+            if (typeof katex === 'undefined') {
+                console.warn('⚠️ KaTeX 라이브러리가 로드되지 않았습니다.');
+                return { text: markdownText, mathBlocks: [] };
+            }
+
+            const mathBlocks = [];
+            let index = 0;
+
+            try {
+                // 블록 수식 추출 및 플레이스홀더로 치환 ($$...$$)
+                // 여러 줄 지원
+                markdownText = markdownText.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
+                    try {
+                        const rendered = katex.renderToString(math.trim(), {
+                            displayMode: true,
+                            throwOnError: false
+                        });
+                        const placeholder = `<span class="math-placeholder-block" data-math-id="${index}"></span>`;
+                        mathBlocks.push({ placeholder, html: rendered, type: 'block', id: index });
+                        index++;
+                        return placeholder;
+                    } catch (e) {
+                        console.error('❌ 블록 수식 렌더링 오류:', e);
+                        return match;
+                    }
+                });
+
+                // 인라인 수식 추출 및 플레이스홀더로 치환 ($...$)
+                // 줄바꿈 허용하되, $ 문자는 제외 (중첩 방지)
+                markdownText = markdownText.replace(/\$([^$]+?)\$/g, (match, math) => {
+                    try {
+                        const rendered = katex.renderToString(math.trim(), {
+                            displayMode: false,
+                            throwOnError: false
+                        });
+                        const placeholder = `<span class="math-placeholder-inline" data-math-id="${index}"></span>`;
+                        mathBlocks.push({ placeholder, html: rendered, type: 'inline', id: index });
+                        index++;
+                        return placeholder;
+                    } catch (e) {
+                        console.error('❌ 인라인 수식 렌더링 오류:', e);
+                        return match;
+                    }
+                });
+
+                return { text: markdownText, mathBlocks };
+            } catch (error) {
+                console.error('❌ 수식 렌더링 오류:', error);
+                return { text: markdownText, mathBlocks: [] };
+            }
+        }
+
+        /**
+         * 플레이스홀더를 실제 렌더링된 수식으로 교체
+         */
+        function replaceMathPlaceholders(html, mathBlocks) {
+            mathBlocks.forEach(({ id, html: mathHtml, type }) => {
+                const wrappedHtml = type === 'block'
+                    ? `<div class="math-block">${mathHtml}</div>`
+                    : `<span class="math-inline">${mathHtml}</span>`;
+
+                // span 플레이스홀더를 찾아서 교체
+                const placeholderClass = type === 'block' ? 'math-placeholder-block' : 'math-placeholder-inline';
+                const regex = new RegExp(
+                    `<span class="${placeholderClass}" data-math-id="${id}"><\\/span>`,
+                    'g'
+                );
+                html = html.replace(regex, wrappedHtml);
+            });
+            return html;
+        }
+
+        /**
+         * 실시간 미리보기 업데이트
+         */
+        function updatePreview() {
+            try {
+                let markdownText = editor.value;
+
+                // TOC 자동 생성
+                markdownText = generateTOC(markdownText);
+
+                // 수식을 플레이스홀더로 치환
+                const { text, mathBlocks } = processMath(markdownText);
+
+                // 마크다운 파싱
+                let htmlContent = marked.parse(text);
+
+                // 플레이스홀더를 렌더링된 수식으로 교체
+                htmlContent = replaceMathPlaceholders(htmlContent, mathBlocks);
+
+                preview.innerHTML = htmlContent;
+
+                // 목차 업데이트
+                updateTOC();
+
+            } catch (error) {
+                console.error('❌ 마크다운 파싱 오류:', error);
+                preview.innerHTML = '<p class="text-red-600">마크다운 렌더링 중 오류가 발생했습니다.</p>';
+            }
+        }
+
+        /**
+         * 목차(TOC) 업데이트
+         */
+        function updateTOC() {
+            try {
+                // 프리뷰에서 모든 헤딩 추출
+                const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+
+                if (headings.length === 0) {
+                    tocContent.innerHTML = '<p class="text-gray-500 text-xs">헤딩이 있는 문서를 작성하면 목차가 자동으로 생성됩니다.</p>';
+                    return;
+                }
+
+                // 목차 HTML 생성
+                let tocHTML = '<ul class="space-y-1">';
+                headings.forEach((heading, index) => {
+                    const level = parseInt(heading.tagName[1]); // H1 -> 1, H2 -> 2, ...
+                    const text = heading.textContent;
+                    const id = `heading-${index}`;
+
+                    // 헤딩에 ID 추가 (스크롤 이동용)
+                    heading.id = id;
+
+                    // 들여쓰기 레벨
+                    const indent = (level - 1) * 12;
+
+                    tocHTML += `
+                        <li style="margin-left: ${indent}px;">
+                            <a href="#${id}"
+                               class="toc-link text-gray-700 hover:text-blue-600 hover:underline block py-1"
+                               data-heading-id="${id}">
+                                ${text}
+                            </a>
+                        </li>
+                    `;
+                });
+                tocHTML += '</ul>';
+
+                tocContent.innerHTML = tocHTML;
+
+                // 목차 링크 클릭 이벤트
+                const tocLinks = tocContent.querySelectorAll('.toc-link');
+                tocLinks.forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const headingId = link.getAttribute('data-heading-id');
+                        const headingElement = document.getElementById(headingId);
+                        if (headingElement) {
+                            // 스크롤 동기화 임시 해제
+                            const wasSyncEnabled = isSyncEnabled;
+                            isSyncEnabled = false;
+
+                            // 헤딩 위치로 스크롤
+                            headingElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                            // 1초 후 동기화 복원
+                            setTimeout(() => {
+                                isSyncEnabled = wasSyncEnabled;
+                            }, 1000);
+                        }
+                    });
+                });
+            } catch (error) {
+                console.error('❌ 목차 업데이트 오류:', error);
+            }
+        }
+
+        /**
+         * 에디터에 마크다운 문법 삽입
+         * @param {string} action - 수행할 액션 (bold, italic, h1, h2, ul, ol, code, quote)
+         */
+        function insertMarkdown(action) {
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            const selectedText = editor.value.substring(start, end);
+            const beforeText = editor.value.substring(0, start);
+            const afterText = editor.value.substring(end);
+
+            let newText = '';
+            let cursorOffset = 0;
+
+            switch(action) {
+                case 'bold':
+                    newText = `**${selectedText || '굵은 텍스트'}**`;
+                    cursorOffset = selectedText ? newText.length : 2;
+                    break;
+
+                case 'italic':
+                    newText = `*${selectedText || '기울임 텍스트'}*`;
+                    cursorOffset = selectedText ? newText.length : 1;
+                    break;
+
+                case 'h1':
+                    newText = `# ${selectedText || '제목 1'}`;
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'h2':
+                    newText = `## ${selectedText || '제목 2'}`;
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'ul':
+                    if (selectedText) {
+                        const lines = selectedText.split('\n');
+                        newText = lines.map(line => `- ${line}`).join('\n');
+                    } else {
+                        newText = '- 목록 항목';
+                    }
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'ol':
+                    if (selectedText) {
+                        const lines = selectedText.split('\n');
+                        newText = lines.map((line, index) => `${index + 1}. ${line}`).join('\n');
+                    } else {
+                        newText = '1. 목록 항목';
+                    }
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'code':
+                    if (selectedText.includes('\n')) {
+                        newText = `\`\`\`\n${selectedText}\n\`\`\``;
+                        cursorOffset = newText.length - 4;
+                    } else {
+                        newText = `\`${selectedText || '코드'}\``;
+                        cursorOffset = selectedText ? newText.length : 1;
+                    }
+                    break;
+
+                case 'quote':
+                    if (selectedText) {
+                        const lines = selectedText.split('\n');
+                        newText = lines.map(line => `> ${line}`).join('\n');
+                    } else {
+                        newText = '> 인용구';
+                    }
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'toc':
+                    newText = '<!-- TOC -->\n자동으로 생성될 위치\n<!-- /TOC -->';
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'math':
+                    if (selectedText) {
+                        // 여러 줄이면 블록 수식, 한 줄이면 인라인 수식
+                        if (selectedText.includes('\n')) {
+                            newText = `$$\n${selectedText}\n$$`;
+                        } else {
+                            newText = `$${selectedText}$`;
+                        }
+                    } else {
+                        newText = '$E = mc^2$';
+                    }
+                    cursorOffset = selectedText ? newText.length : 1;
+                    break;
+
+                default:
+                    return;
+            }
+
+            // 텍스트 업데이트
+            editor.value = beforeText + newText + afterText;
+
+            // 커서 위치 설정
+            if (selectedText) {
+                editor.selectionStart = editor.selectionEnd = start + cursorOffset;
+            } else {
+                editor.selectionStart = start + cursorOffset;
+                editor.selectionEnd = start + cursorOffset;
+            }
+
+            // 포커스 및 미리보기 업데이트
+            editor.focus();
+            updatePreview();
+
+            // 히스토리에 저장
+            saveToHistory();
+        }
+
+        /**
+         * PDF로 내보내기
+         */
+        async function exportToPDF() {
+            // 원본 스타일 백업
+            const originalOverflow = preview.style.overflow;
+            const originalHeight = preview.style.height;
+            const originalMaxHeight = preview.style.maxHeight;
+
+            try {
+                // 로딩 상태 표시
+                exportPdfBtn.classList.add('loading');
+                exportPdfBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="ml-2">생성 중...</span>';
+
+                console.log('📄 PDF 생성 시작...');
+                console.log('Preview 내용:', preview.innerHTML.substring(0, 100));
+
+                // preview 요소의 overflow 임시 제거 (전체 콘텐츠 표시)
+                preview.style.overflow = 'visible';
+                preview.style.height = 'auto';
+                preview.style.maxHeight = 'none';
+
+                // DOM 업데이트 대기
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                console.log('Preview 크기:', preview.scrollWidth, 'x', preview.scrollHeight);
+
+                // PDF 생성 옵션
+                const opt = {
+                    margin: [10, 10, 10, 10],
+                    filename: currentFilename.replace(/\.md$/, '.pdf') || 'document.pdf',
+                    image: {
+                        type: 'jpeg',
+                        quality: 0.95
+                    },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        logging: true,
+                        backgroundColor: '#ffffff',
+                        windowHeight: preview.scrollHeight,
+                        height: preview.scrollHeight
+                    },
+                    jsPDF: {
+                        unit: 'mm',
+                        format: 'a4',
+                        orientation: 'portrait'
+                    }
+                };
+
+                // PDF 생성
+                console.log('html2pdf 시작...');
+                await html2pdf().from(preview).set(opt).save();
+
+                console.log('✅ PDF 내보내기 완료');
+
+            } catch (error) {
+                console.error('❌ PDF 내보내기 오류:', error);
+                console.error('에러 상세:', error.stack);
+                alert('PDF 생성 중 오류가 발생했습니다:\n' + error.message);
+            } finally {
+                // 원본 스타일 복원
+                preview.style.overflow = originalOverflow;
+                preview.style.height = originalHeight;
+                preview.style.maxHeight = originalMaxHeight;
+
+                // 로딩 상태 해제
+                exportPdfBtn.classList.remove('loading');
+                exportPdfBtn.innerHTML = '<i class="fas fa-file-pdf"></i><span class="ml-2">PDF</span>';
+            }
+        }
+
+        /**
+         * Word(.doc)로 내보내기
+         * HTML을 .doc 형식으로 변환하는 방식 사용
+         */
+        function exportToWord() {
+            try {
+                // 로딩 상태 표시
+                exportWordBtn.classList.add('loading');
+                exportWordBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="ml-2">생성 중...</span>';
+
+                // 프리뷰 HTML 가져오기
+                const previewContent = preview.innerHTML;
+
+                // Word 문서용 HTML 생성 (스타일 포함)
+                const htmlContent = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        <style>
+                            body {
+                                font-family: 'Malgun Gothic', Arial, sans-serif;
+                                line-height: 1.6;
+                                max-width: 800px;
+                                margin: 0 auto;
+                                padding: 20px;
+                            }
+                            h1 { font-size: 2em; margin-bottom: 0.5em; }
+                            h2 { font-size: 1.5em; margin-top: 1em; margin-bottom: 0.5em; }
+                            h3 { font-size: 1.25em; margin-top: 1em; margin-bottom: 0.5em; }
+                            p { margin: 1em 0; }
+                            ul, ol { margin: 1em 0; padding-left: 2em; }
+                            code {
+                                background-color: #f0f0f0;
+                                padding: 2px 6px;
+                                border-radius: 3px;
+                                font-family: 'Courier New', monospace;
+                            }
+                            pre {
+                                background-color: #f5f5f5;
+                                padding: 1em;
+                                border-radius: 5px;
+                                overflow-x: auto;
+                            }
+                            pre code {
+                                background-color: transparent;
+                                padding: 0;
+                            }
+                            blockquote {
+                                border-left: 4px solid #ddd;
+                                margin: 1em 0;
+                                padding-left: 1em;
+                                color: #666;
+                            }
+                            table {
+                                border-collapse: collapse;
+                                width: 100%;
+                                margin: 1em 0;
+                            }
+                            th, td {
+                                border: 1px solid #333;
+                                padding: 8px 12px;
+                                text-align: left;
+                            }
+                            th {
+                                background-color: #f0f0f0;
+                                font-weight: bold;
+                            }
+                            del, s {
+                                text-decoration: line-through;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        ${previewContent}
+                    </body>
+                    </html>
+                `;
+
+                // Blob 생성
+                const blob = new Blob(['\ufeff', htmlContent], {
+                    type: 'application/msword'
+                });
+
+                // 다운로드 링크 생성 및 클릭
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'markdown-document.doc';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                console.log('✅ Word 내보내기 완료');
+
+            } catch (error) {
+                console.error('❌ Word 내보내기 오류:', error);
+                alert('Word 문서 생성 중 오류가 발생했습니다:\n' + error.message);
+            } finally {
+                // 로딩 상태 해제
+                exportWordBtn.classList.remove('loading');
+                exportWordBtn.innerHTML = '<i class="fas fa-file-word"></i><span class="ml-2">Word</span>';
+            }
+        }
+
+        /**
+         * HWPX용 마크다운 파일 저장
+         * pypandoc-hwpx 명령줄 도구로 변환하기 위한 .md 파일 생성
+         */
+        function exportToHwpx() {
+            try {
+                // 로딩 상태 표시
+                exportHwpxBtn.classList.add('loading');
+                exportHwpxBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="ml-2">저장 중...</span>';
+
+                const content = editor.value;
+                const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+
+                // 파일명 생성 (.md 확장자 유지)
+                const filename = currentFilename.endsWith('.md')
+                    ? currentFilename.replace(/\.md$/, '_hwpx.md')
+                    : currentFilename + '_hwpx.md';
+
+                // 다운로드 링크 생성
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                console.log('✅ HWPX용 마크다운 저장 완료:', filename);
+                console.log('💡 다음 명령으로 변환: pypandoc-hwpx', filename, '-o output.hwpx');
+
+            } catch (error) {
+                console.error('❌ HWPX용 파일 저장 오류:', error);
+                alert('파일 저장 중 오류가 발생했습니다:\n' + error.message);
+            } finally {
+                // 로딩 상태 해제
+                exportHwpxBtn.classList.remove('loading');
+                exportHwpxBtn.innerHTML = '<i class="fas fa-file-archive"></i><span class="ml-2">HWPX</span>';
+            }
+        }
+
+        /**
+         * 마크다운 파일 열기
+         */
+        function openMarkdownFile(file) {
+            if (!file) return;
+
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+
+                    // 에디터에 내용 로드
+                    editor.value = content;
+                    updatePreview();
+
+                    // 파일명 업데이트
+                    currentFilename = file.name;
+                    filenameDisplay.textContent = currentFilename;
+
+                    // 히스토리 초기화 및 현재 상태 저장
+                    history = [];
+                    historyIndex = -1;
+                    saveToHistory();
+
+                    console.log('✅ 파일 열기 완료:', currentFilename);
+
+                } catch (error) {
+                    console.error('❌ 파일 읽기 오류:', error);
+                    alert('파일을 읽는 중 오류가 발생했습니다:\n' + error.message);
+                }
+            };
+
+            reader.onerror = () => {
+                console.error('❌ 파일 읽기 실패');
+                alert('파일을 읽을 수 없습니다.');
+            };
+
+            reader.readAsText(file);
+        }
+
+        /**
+         * 마크다운 파일로 저장
+         */
+        function saveMarkdownFile() {
+            try {
+                const content = editor.value;
+                const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+
+                // 다운로드 링크 생성
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = currentFilename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                console.log('✅ 마크다운 저장 완료:', currentFilename);
+
+            } catch (error) {
+                console.error('❌ 파일 저장 오류:', error);
+                alert('파일 저장 중 오류가 발생했습니다:\n' + error.message);
+            }
+        }
+
+        /**
+         * 드래그 앤 드롭 처리
+         */
+        function setupDragAndDrop() {
+            // 드래그 오버 방지 (전체 창)
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            // 에디터 영역에 드래그 오버 효과
+            ['dragenter', 'dragover'].forEach(eventName => {
+                editorPanel.addEventListener(eventName, () => {
+                    editorPanel.classList.add('drag-over');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                editorPanel.addEventListener(eventName, () => {
+                    editorPanel.classList.remove('drag-over');
+                }, false);
+            });
+
+            // 파일 드롭 처리
+            editorPanel.addEventListener('drop', handleDrop, false);
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+
+                if (files.length > 0) {
+                    const file = files[0];
+
+                    // 마크다운 또는 텍스트 파일만 허용
+                    if (file.name.match(/\.(md|markdown|txt)$/i)) {
+                        openMarkdownFile(file);
+                    } else {
+                        alert('마크다운 파일(.md, .markdown, .txt)만 열 수 있습니다.');
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        // 이벤트 리스너 등록
+        // ============================================================
+
+        // 에디터 입력 시 실시간 미리보기 업데이트 및 히스토리 저장
+        let inputTimeout;
+        editor.addEventListener('input', () => {
+            updatePreview();
+
+            // 디바운싱: 500ms 후에 히스토리 저장
+            clearTimeout(inputTimeout);
+            inputTimeout = setTimeout(() => {
+                saveToHistory();
+            }, 500);
+        });
+
+        // 툴바 버튼 클릭 이벤트
+        toolbarButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const action = button.getAttribute('data-action');
+                insertMarkdown(action);
+            });
+        });
+
+        // Undo/Redo 버튼
+        undoBtn.addEventListener('click', undo);
+        redoBtn.addEventListener('click', redo);
+
+        // 파일 열기 버튼
+        openFileBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 파일 선택 시
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                openMarkdownFile(file);
+            }
+            // 파일 입력 초기화 (같은 파일 재선택 가능하도록)
+            fileInput.value = '';
+        });
+
+        // 마크다운 저장 버튼
+        saveMarkdownBtn.addEventListener('click', saveMarkdownFile);
+
+        // PDF 내보내기 버튼
+        exportPdfBtn.addEventListener('click', exportToPDF);
+
+        // Word 내보내기 버튼
+        exportWordBtn.addEventListener('click', exportToWord);
+
+        // HWPX 내보내기 버튼
+        exportHwpxBtn.addEventListener('click', exportToHwpx);
+
+        // 키보드 단축키
+        editor.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                // Ctrl+Z: Undo
+                if (e.key === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    undo();
+                }
+                // Ctrl+Y or Ctrl+Shift+Z: Redo
+                else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+                    e.preventDefault();
+                    redo();
+                }
+                // Ctrl+B: Bold
+                else if (e.key === 'b' || e.key === 'B') {
+                    e.preventDefault();
+                    insertMarkdown('bold');
+                }
+                // Ctrl+I: Italic
+                else if (e.key === 'i' || e.key === 'I') {
+                    e.preventDefault();
+                    insertMarkdown('italic');
+                }
+            }
+        });
+
+        // 리사이저 드래그 기능
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const container = editorPanel.parentElement;
+            const containerRect = container.getBoundingClientRect();
+
+            // TOC 패널 너비 고려
+            const tocWidth = isTocVisible ? 250 : 0;
+            const availableWidth = containerRect.width - tocWidth;
+
+            const newLeftWidth = e.clientX - containerRect.left;
+
+            // 최소 너비 제한 (20% ~ 80% of available width)
+            const minWidth = availableWidth * 0.2;
+            const maxWidth = availableWidth * 0.8;
+
+            if (newLeftWidth >= minWidth && newLeftWidth <= maxWidth) {
+                const leftFlex = newLeftWidth;
+                const rightFlex = availableWidth - newLeftWidth - 5; // 5px는 리사이저 너비
+
+                editorPanel.style.flex = `0 0 ${leftFlex}px`;
+                previewPanel.style.flex = `0 0 ${rightFlex}px`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+
+        // 스크롤 동기화
+        // 에디터 스크롤 -> 프리뷰 스크롤 동기화
+        editor.addEventListener('scroll', () => {
+            if (!isSyncEnabled || isSyncingScroll) return;
+
+            isSyncingScroll = true;
+
+            // 에디터의 스크롤 비율 계산
+            const scrollPercentage = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+
+            // 프리뷰를 같은 비율로 스크롤
+            preview.scrollTop = scrollPercentage * (preview.scrollHeight - preview.clientHeight);
+
+            setTimeout(() => {
+                isSyncingScroll = false;
+            }, 10);
+        });
+
+        // 프리뷰 스크롤 -> 에디터 스크롤 동기화
+        preview.addEventListener('scroll', () => {
+            if (!isSyncEnabled || isSyncingScroll) return;
+
+            isSyncingScroll = true;
+
+            // 프리뷰의 스크롤 비율 계산
+            const scrollPercentage = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
+
+            // 에디터를 같은 비율로 스크롤
+            editor.scrollTop = scrollPercentage * (editor.scrollHeight - editor.clientHeight);
+
+            setTimeout(() => {
+                isSyncingScroll = false;
+            }, 10);
+        });
+
+        // 목차 패널 토글
+        toggleTocBtn.addEventListener('click', () => {
+            isTocVisible = !isTocVisible;
+
+            if (isTocVisible) {
+                // 패널 표시
+                tocPanel.style.display = 'flex';
+                toggleTocBtn.classList.add('bg-blue-100');
+            } else {
+                // 패널 숨김
+                tocPanel.style.display = 'none';
+                toggleTocBtn.classList.remove('bg-blue-100');
+            }
+        });
+
+        // 스크롤 동기화 토글
+        toggleSyncBtn.addEventListener('click', () => {
+            isSyncEnabled = !isSyncEnabled;
+            if (isSyncEnabled) {
+                toggleSyncBtn.classList.add('bg-green-100');
+                toggleSyncBtn.classList.remove('bg-red-100');
+            } else {
+                toggleSyncBtn.classList.remove('bg-green-100');
+                toggleSyncBtn.classList.add('bg-red-100');
+            }
+        });
+
+        // ===== 찾기/바꾸기 기능 =====
+
+        // 찾기 패널 열기
+        findBtn.addEventListener('click', () => {
+            findReplacePanel.style.display = 'block';
+            replaceRow.style.display = 'none';
+            findInput.focus();
+            findInput.select();
+        });
+
+        // 바꾸기 패널 열기
+        replaceBtn.addEventListener('click', () => {
+            findReplacePanel.style.display = 'block';
+            replaceRow.style.display = 'flex';
+            findInput.focus();
+            findInput.select();
+        });
+
+        // 패널 닫기
+        closeFindBtn.addEventListener('click', () => {
+            findReplacePanel.style.display = 'none';
+            clearHighlights();
+        });
+
+        // 찾기 함수
+        function findInEditor(searchText) {
+            if (!searchText) {
+                clearHighlights();
+                findCount.textContent = '0개 찾음';
+                return;
+            }
+
+            const text = editor.value;
+            findMatches = [];
+            let index = 0;
+
+            // 모든 매치 찾기
+            while ((index = text.indexOf(searchText, index)) !== -1) {
+                findMatches.push(index);
+                index += searchText.length;
+            }
+
+            // 카운트 업데이트
+            if (findMatches.length > 0) {
+                currentMatchIndex = 0;
+                findCount.textContent = `${findMatches.length}개 찾음`;
+                highlightCurrentMatch();
+            } else {
+                currentMatchIndex = -1;
+                findCount.textContent = '0개 찾음';
+            }
+        }
+
+        // 현재 매치 하이라이트
+        function highlightCurrentMatch() {
+            if (currentMatchIndex < 0 || currentMatchIndex >= findMatches.length) return;
+
+            const matchPos = findMatches[currentMatchIndex];
+            const searchText = findInput.value;
+
+            // 커서 이동 및 선택
+            editor.focus();
+            editor.setSelectionRange(matchPos, matchPos + searchText.length);
+
+            // 스크롤하여 보이기
+            const lineHeight = parseInt(window.getComputedStyle(editor).lineHeight) || 20;
+            const textBeforeMatch = editor.value.substring(0, matchPos);
+            const lineNumber = (textBeforeMatch.match(/\n/g) || []).length;
+            editor.scrollTop = lineNumber * lineHeight - editor.clientHeight / 2;
+
+            // 카운트 업데이트
+            findCount.textContent = `${currentMatchIndex + 1}/${findMatches.length}`;
+        }
+
+        // 하이라이트 제거
+        function clearHighlights() {
+            findMatches = [];
+            currentMatchIndex = -1;
+        }
+
+        // 이전 찾기
+        findPrevBtn.addEventListener('click', () => {
+            if (findMatches.length === 0) return;
+            currentMatchIndex = (currentMatchIndex - 1 + findMatches.length) % findMatches.length;
+            highlightCurrentMatch();
+        });
+
+        // 다음 찾기
+        findNextBtn.addEventListener('click', () => {
+            if (findMatches.length === 0) return;
+            currentMatchIndex = (currentMatchIndex + 1) % findMatches.length;
+            highlightCurrentMatch();
+        });
+
+        // 찾기 입력 변경 시
+        findInput.addEventListener('input', () => {
+            findInEditor(findInput.value);
+        });
+
+        // Enter 키로 다음 찾기
+        findInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    findPrevBtn.click();
+                } else {
+                    findNextBtn.click();
+                }
+            } else if (e.key === 'Escape') {
+                closeFindBtn.click();
+            }
+        });
+
+        // 바꾸기 입력에서 Enter
+        replaceInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                replaceOneBtn.click();
+            } else if (e.key === 'Escape') {
+                closeFindBtn.click();
+            }
+        });
+
+        // 하나 바꾸기
+        replaceOneBtn.addEventListener('click', () => {
+            if (currentMatchIndex < 0 || currentMatchIndex >= findMatches.length) return;
+
+            const searchText = findInput.value;
+            const replaceText = replaceInput.value;
+            const matchPos = findMatches[currentMatchIndex];
+
+            // 텍스트 바꾸기
+            const text = editor.value;
+            editor.value = text.substring(0, matchPos) + replaceText + text.substring(matchPos + searchText.length);
+
+            // 히스토리에 저장
+            saveToHistory();
+
+            // 다시 찾기
+            findInEditor(searchText);
+
+            // 프리뷰 업데이트
+            updatePreview();
+        });
+
+        // 모두 바꾸기
+        replaceAllBtn.addEventListener('click', () => {
+            if (findMatches.length === 0) return;
+
+            const searchText = findInput.value;
+            const replaceText = replaceInput.value;
+
+            // 전체 텍스트에서 모두 바꾸기
+            const text = editor.value;
+            const newText = text.split(searchText).join(replaceText);
+
+            if (text !== newText) {
+                editor.value = newText;
+                saveToHistory();
+                updatePreview();
+
+                // 결과 표시
+                const count = findMatches.length;
+                findCount.textContent = `${count}개 바꿈`;
+
+                // 다시 찾기 (남은 항목 확인)
+                setTimeout(() => {
+                    findInEditor(searchText);
+                }, 100);
+            }
+        });
+
+        // 키보드 단축키
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+F: 찾기
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                findBtn.click();
+            }
+            // Ctrl+H: 바꾸기
+            else if (e.ctrlKey && e.key === 'h') {
+                e.preventDefault();
+                replaceBtn.click();
+            }
+        });
+
+        // ===== 찾기/바꾸기 기능 끝 =====
+
+        // 페이지 로드 시 초기화
+        window.addEventListener('DOMContentLoaded', initialize);
+
+        // CDN 로드 실패 감지
+        window.addEventListener('error', (e) => {
+            if (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK') {
+                console.error('❌ 외부 리소스 로드 실패:', e.target.src || e.target.href);
+                alert('일부 라이브러리를 로드하는데 실패했습니다.\n인터넷 연결을 확인해주세요.');
+            }
+        }, true);
+
+    </script>
+</body>
+</html>
