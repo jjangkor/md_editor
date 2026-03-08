@@ -507,7 +507,7 @@
         <!-- 메인 영역: 크기 조절 가능한 분할 -->
         <main class="flex-1 flex overflow-hidden">
             <!-- 왼쪽: 에디터 영역 -->
-            <div id="editorPanel" class="bg-gray-50 flex flex-col" style="flex: 1.2;">
+            <div id="editorPanel" class="bg-gray-50 flex flex-col" style="flex: 3;">
                 <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
                     <i class="fas fa-edit mr-2"></i>Editor
                 </div>
@@ -521,7 +521,7 @@
             <div id="resizer" class="resizer"></div>
 
             <!-- 오른쪽: 프리뷰 영역 -->
-            <div id="previewPanel" class="bg-white flex flex-col" style="flex: 0.8;">
+            <div id="previewPanel" class="bg-white flex flex-col" style="flex: 1;">
                 <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
                     <i class="fas fa-eye mr-2"></i>Preview
                 </div>
@@ -1213,11 +1213,36 @@ Happy Writing! ✍️`;
 
                 // PDF 생성
                 console.log('html2pdf 시작...');
-                await html2pdf().from(preview).set(opt).save();
+                const pdfBlob = await html2pdf().from(preview).set(opt).outputPdf('blob');
+
+                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: opt.filename,
+                        types: [{
+                            description: 'PDF Files',
+                            accept: { 'application/pdf': ['.pdf'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(pdfBlob);
+                    await writable.close();
+                } else {
+                    // 폴백: 자동 다운로드
+                    const url = URL.createObjectURL(pdfBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = opt.filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }
 
                 console.log('✅ PDF 내보내기 완료');
 
             } catch (error) {
+                if (error.name === 'AbortError') return; // 사용자 취소
                 console.error('❌ PDF 내보내기 오류:', error);
                 console.error('에러 상세:', error.stack);
                 alert('PDF 생성 중 오류가 발생했습니다:\n' + error.message);
@@ -1237,7 +1262,7 @@ Happy Writing! ✍️`;
          * Word(.doc)로 내보내기
          * HTML을 .doc 형식으로 변환하는 방식 사용
          */
-        function exportToWord() {
+        async function exportToWord() {
             try {
                 // 로딩 상태 표시
                 exportWordBtn.classList.add('loading');
@@ -1317,19 +1342,36 @@ Happy Writing! ✍️`;
                     type: 'application/msword'
                 });
 
-                // 다운로드 링크 생성 및 클릭
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = 'markdown-document.doc';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                const wordFilename = currentFilename.replace(/\.md$/, '.doc') || 'markdown-document.doc';
+
+                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: wordFilename,
+                        types: [{
+                            description: 'Word Documents',
+                            accept: { 'application/msword': ['.doc'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                } else {
+                    // 폴백: 자동 다운로드
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = wordFilename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }
 
                 console.log('✅ Word 내보내기 완료');
 
             } catch (error) {
+                if (error.name === 'AbortError') return; // 사용자 취소
                 console.error('❌ Word 내보내기 오류:', error);
                 alert('Word 문서 생성 중 오류가 발생했습니다:\n' + error.message);
             } finally {
@@ -1343,7 +1385,7 @@ Happy Writing! ✍️`;
          * HWPX용 마크다운 파일 저장
          * pypandoc-hwpx 명령줄 도구로 변환하기 위한 .md 파일 생성
          */
-        function exportToHwpx() {
+        async function exportToHwpx() {
             try {
                 // 로딩 상태 표시
                 exportHwpxBtn.classList.add('loading');
@@ -1357,20 +1399,35 @@ Happy Writing! ✍️`;
                     ? currentFilename.replace(/\.md$/, '_hwpx.md')
                     : currentFilename + '_hwpx.md';
 
-                // 다운로드 링크 생성
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: 'Markdown Files',
+                            accept: { 'text/markdown': ['.md', '.markdown'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                } else {
+                    // 폴백: 자동 다운로드
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }
 
                 console.log('✅ HWPX용 마크다운 저장 완료:', filename);
                 console.log('💡 다음 명령으로 변환: pypandoc-hwpx', filename, '-o output.hwpx');
 
             } catch (error) {
+                if (error.name === 'AbortError') return; // 사용자 취소
                 console.error('❌ HWPX용 파일 저장 오류:', error);
                 alert('파일 저장 중 오류가 발생했습니다:\n' + error.message);
             } finally {
