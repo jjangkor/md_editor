@@ -1422,26 +1422,46 @@ Happy Writing! ✍️`;
         }
 
         /**
-         * 마크다운 파일로 저장
+         * 마크다운 파일로 저장 (저장 경로 지정 지원)
          */
-        function saveMarkdownFile() {
+        async function saveMarkdownFile() {
             try {
                 const content = editor.value;
-                const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
 
-                // 다운로드 링크 생성
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = currentFilename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-
-                console.log('✅ 마크다운 저장 완료:', currentFilename);
+                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: currentFilename,
+                        types: [{
+                            description: 'Markdown Files',
+                            accept: { 'text/markdown': ['.md', '.markdown'] }
+                        }, {
+                            description: 'Text Files',
+                            accept: { 'text/plain': ['.txt'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                    currentFilename = handle.name;
+                    filenameDisplay.textContent = currentFilename;
+                    console.log('✅ 마크다운 저장 완료:', currentFilename);
+                } else {
+                    // 폴백: 기존 다운로드 방식 (File System Access API 미지원 브라우저)
+                    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = currentFilename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    console.log('✅ 마크다운 저장 완료 (다운로드):', currentFilename);
+                }
 
             } catch (error) {
+                if (error.name === 'AbortError') return; // 사용자가 대화상자 취소
                 console.error('❌ 파일 저장 오류:', error);
                 alert('파일 저장 중 오류가 발생했습니다:\n' + error.message);
             }
