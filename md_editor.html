@@ -1447,7 +1447,12 @@ Happy Writing! ✍️`;
                     filenameDisplay.textContent = currentFilename;
                     console.log('✅ 마크다운 저장 완료:', currentFilename);
                 } else {
-                    // 폴백: 기존 다운로드 방식 (File System Access API 미지원 브라우저)
+                    // 폴백: 파일명 입력 후 다운로드 (file:// 등 File System Access API 미지원 환경)
+                    const filename = prompt('저장할 파일명을 입력하세요:', currentFilename);
+                    if (!filename) return; // 취소
+                    currentFilename = filename.endsWith('.md') || filename.endsWith('.markdown') || filename.endsWith('.txt')
+                        ? filename : filename + '.md';
+                    filenameDisplay.textContent = currentFilename;
                     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
