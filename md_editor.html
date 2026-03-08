@@ -362,12 +362,6 @@
                     <i class="fas fa-file-word"></i>
                     <span>Word</span>
                 </button>
-                <button id="exportHwpxBtn"
-                        class="bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
-                        title="HWPX 변환용 마크다운 저장 (pypandoc-hwpx 사용)">
-                    <i class="fas fa-file-archive"></i>
-                    <span>HWPX</span>
-                </button>
             </div>
         </header>
 
@@ -556,7 +550,7 @@
         const preview = document.getElementById('preview');
         const exportPdfBtn = document.getElementById('exportPdfBtn');
         const exportWordBtn = document.getElementById('exportWordBtn');
-        const exportHwpxBtn = document.getElementById('exportHwpxBtn');
+
         const toolbarButtons = document.querySelectorAll('.btn-toolbar');
         const undoBtn = document.getElementById('undoBtn');
         const redoBtn = document.getElementById('redoBtn');
@@ -1382,62 +1376,6 @@ Happy Writing! ✍️`;
         }
 
         /**
-         * HWPX용 마크다운 파일 저장
-         * pypandoc-hwpx 명령줄 도구로 변환하기 위한 .md 파일 생성
-         */
-        async function exportToHwpx() {
-            try {
-                // 로딩 상태 표시
-                exportHwpxBtn.classList.add('loading');
-                exportHwpxBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="ml-2">저장 중...</span>';
-
-                const content = editor.value;
-                const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-
-                // 파일명 생성 (.md 확장자 유지)
-                const filename = currentFilename.endsWith('.md')
-                    ? currentFilename.replace(/\.md$/, '_hwpx.md')
-                    : currentFilename + '_hwpx.md';
-
-                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
-                if (window.showSaveFilePicker) {
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: filename,
-                        types: [{
-                            description: 'Markdown Files',
-                            accept: { 'text/markdown': ['.md', '.markdown'] }
-                        }]
-                    });
-                    const writable = await handle.createWritable();
-                    await writable.write(blob);
-                    await writable.close();
-                } else {
-                    // 폴백: 자동 다운로드
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                }
-
-                console.log('✅ HWPX용 마크다운 저장 완료:', filename);
-                console.log('💡 다음 명령으로 변환: pypandoc-hwpx', filename, '-o output.hwpx');
-
-            } catch (error) {
-                if (error.name === 'AbortError') return; // 사용자 취소
-                console.error('❌ HWPX용 파일 저장 오류:', error);
-                alert('파일 저장 중 오류가 발생했습니다:\n' + error.message);
-            } finally {
-                // 로딩 상태 해제
-                exportHwpxBtn.classList.remove('loading');
-                exportHwpxBtn.innerHTML = '<i class="fas fa-file-archive"></i><span class="ml-2">HWPX</span>';
-            }
-        }
-
-        /**
          * 마크다운 파일 열기
          */
         function openMarkdownFile(file) {
@@ -1628,8 +1566,6 @@ Happy Writing! ✍️`;
         // Word 내보내기 버튼
         exportWordBtn.addEventListener('click', exportToWord);
 
-        // HWPX 내보내기 버튼
-        exportHwpxBtn.addEventListener('click', exportToHwpx);
 
         // 키보드 단축키
         editor.addEventListener('keydown', (e) => {
