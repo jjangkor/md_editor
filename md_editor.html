@@ -229,6 +229,7 @@
             cursor: col-resize;
             position: relative;
             flex-shrink: 0;
+            touch-action: none;
         }
 
         .resizer:hover {
@@ -326,6 +327,37 @@
         .prose ol {
             page-break-inside: auto;
         }
+
+        #editorPanel,
+        #previewPanel {
+            min-width: 0;
+            min-height: 0;
+        }
+
+        @media (max-width: 767px) {
+            .editor-workspace {
+                flex-direction: column;
+            }
+
+            #editorPanel,
+            #previewPanel {
+                flex: 1 1 50% !important;
+                width: 100%;
+            }
+
+            .resizer {
+                width: 100%;
+                height: 6px;
+                cursor: row-resize;
+            }
+
+            #tocPanel {
+                width: 100% !important;
+                max-height: 40%;
+                border-left: 0;
+                border-top: 1px solid #d1d5db;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -333,15 +365,15 @@
     <div class="h-screen flex flex-col">
 
         <!-- 헤더 -->
-        <header class="bg-gray-800 text-white px-6 py-4 flex items-center justify-between shadow-lg">
+        <header class="bg-gray-800 text-white px-3 py-2 md:px-6 md:py-4 flex flex-wrap items-center gap-3 justify-between shadow-lg">
             <div class="flex items-center space-x-4">
                 <i class="fas fa-markdown text-3xl"></i>
                 <div>
-                    <h1 class="text-2xl font-bold">JJANG's MD Editor</h1>
+                    <h1 class="text-lg md:text-2xl font-bold">JJANG's MD Editor</h1>
                     <div id="filenameDisplay" class="filename-display">untitled.md</div>
                 </div>
             </div>
-            <div class="flex items-center space-x-3">
+            <div class="flex flex-wrap items-center gap-2 md:gap-3">
                 <input type="file" id="fileInput" accept=".md,.markdown,.txt" />
                 <button id="openFileBtn"
                         class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
@@ -371,7 +403,7 @@
         </header>
 
         <!-- 툴바 -->
-        <div class="bg-gray-200 px-6 py-3 flex items-center space-x-2 border-b border-gray-300">
+        <div class="bg-gray-200 px-3 md:px-6 py-2 md:py-3 flex items-center space-x-2 border-b border-gray-300 overflow-x-auto flex-shrink-0">
             <button id="undoBtn" class="btn-toolbar px-3 py-2 rounded hover:bg-gray-300 transition-colors"
                     title="되돌리기 (Ctrl+Z)"
                     disabled>
@@ -504,7 +536,7 @@
         </div>
 
         <!-- 메인 영역: 크기 조절 가능한 분할 -->
-        <main class="flex-1 flex overflow-hidden">
+        <main class="editor-workspace flex-1 flex overflow-hidden">
             <!-- 왼쪽: 에디터 영역 -->
             <div id="editorPanel" class="bg-gray-50 flex flex-col" style="flex: 7;">
                 <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
@@ -517,7 +549,11 @@
             </div>
 
             <!-- 리사이저 -->
-            <div id="resizer" class="resizer"></div>
+            <div id="resizer" class="resizer"
+                 role="separator"
+                 aria-label="에디터와 미리보기 크기 조절"
+                 aria-orientation="vertical"
+                 tabindex="0"></div>
 
             <!-- 오른쪽: 프리뷰 영역 -->
             <div id="previewPanel" class="bg-white flex flex-col" style="flex: 1;">
@@ -1630,47 +1666,84 @@ Happy Writing! ✍️`;
             }
         });
 
-        // 리사이저 드래그 기능
+        // 리사이저 드래그 및 키보드 조절 기능
         let isResizing = false;
+        let wasNarrowLayout = window.matchMedia('(max-width: 767px)').matches;
 
-        resizer.addEventListener('mousedown', (e) => {
+        function isNarrowLayout() {
+            return window.matchMedia('(max-width: 767px)').matches;
+        }
+
+        function applyDefaultPanelSizes() {
+            const narrow = isNarrowLayout();
+            editorPanel.style.flex = narrow ? '1 1 50%' : '7 1 0%';
+            previewPanel.style.flex = narrow ? '1 1 50%' : '1 1 0%';
+            resizer.setAttribute('aria-orientation', narrow ? 'horizontal' : 'vertical');
+        }
+
+        function resizePanels(clientX, clientY) {
+            const container = editorPanel.parentElement;
+            const containerRect = container.getBoundingClientRect();
+            const narrow = isNarrowLayout();
+            const tocSize = isTocVisible ? (narrow ? tocPanel.offsetHeight : tocPanel.offsetWidth) : 0;
+            const availableSize = (narrow ? containerRect.height : containerRect.width) - tocSize;
+            const editorSize = narrow
+                ? clientY - containerRect.top
+                : clientX - containerRect.left;
+            const minSize = availableSize * 0.2;
+            const maxSize = availableSize * 0.8;
+
+            if (editorSize >= minSize && editorSize <= maxSize) {
+                const previewSize = availableSize - editorSize - (narrow ? resizer.offsetHeight : resizer.offsetWidth);
+                editorPanel.style.flex = `0 0 ${editorSize}px`;
+                previewPanel.style.flex = `0 0 ${previewSize}px`;
+            }
+        }
+
+        resizer.addEventListener('pointerdown', (e) => {
             isResizing = true;
-            document.body.style.cursor = 'col-resize';
+            resizer.setPointerCapture(e.pointerId);
+            document.body.style.cursor = isNarrowLayout() ? 'row-resize' : 'col-resize';
             document.body.style.userSelect = 'none';
         });
 
-        document.addEventListener('mousemove', (e) => {
+        resizer.addEventListener('pointermove', (e) => {
             if (!isResizing) return;
-
-            const container = editorPanel.parentElement;
-            const containerRect = container.getBoundingClientRect();
-
-            // TOC 패널 너비 고려
-            const tocWidth = isTocVisible ? 250 : 0;
-            const availableWidth = containerRect.width - tocWidth;
-
-            const newLeftWidth = e.clientX - containerRect.left;
-
-            // 최소 너비 제한 (20% ~ 80% of available width)
-            const minWidth = availableWidth * 0.2;
-            const maxWidth = availableWidth * 0.8;
-
-            if (newLeftWidth >= minWidth && newLeftWidth <= maxWidth) {
-                const leftFlex = newLeftWidth;
-                const rightFlex = availableWidth - newLeftWidth - 5; // 5px는 리사이저 너비
-
-                editorPanel.style.flex = `0 0 ${leftFlex}px`;
-                previewPanel.style.flex = `0 0 ${rightFlex}px`;
-            }
+            resizePanels(e.clientX, e.clientY);
         });
 
-        document.addEventListener('mouseup', () => {
+        function stopResizing() {
             if (isResizing) {
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
             }
+        }
+
+        resizer.addEventListener('pointerup', stopResizing);
+        resizer.addEventListener('pointercancel', stopResizing);
+
+        resizer.addEventListener('keydown', (e) => {
+            const narrow = isNarrowLayout();
+            const decreaseKey = narrow ? 'ArrowUp' : 'ArrowLeft';
+            const increaseKey = narrow ? 'ArrowDown' : 'ArrowRight';
+            if (e.key !== decreaseKey && e.key !== increaseKey) return;
+
+            e.preventDefault();
+            const rect = resizer.getBoundingClientRect();
+            const step = 24 * (e.key === decreaseKey ? -1 : 1);
+            resizePanels(rect.left + step, rect.top + step);
         });
+
+        window.addEventListener('resize', () => {
+            const narrow = isNarrowLayout();
+            if (narrow !== wasNarrowLayout) {
+                wasNarrowLayout = narrow;
+                applyDefaultPanelSizes();
+            }
+        });
+
+        applyDefaultPanelSizes();
 
         // 스크롤 동기화
         // 에디터 스크롤 -> 프리뷰 스크롤 동기화
