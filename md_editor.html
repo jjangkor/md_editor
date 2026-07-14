@@ -534,7 +534,844 @@
             <div id="tocPanel" class="bg-gray-50 border-l border-gray-300" style="width: 250px; display: none; flex-direction: column;">
                 <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
                     <i class="fas fa-list mr-2"></i>목차 (TOC)
-             …8247 tokens truncated…                  // 폴백: 자동 다운로드
+                </div>
+                <div id="tocContent" class="flex-1 p-4 overflow-y-auto text-sm">
+                    <!-- 목차 리스트가 여기에 렌더링됩니다 -->
+                    <p class="text-gray-500 text-xs">헤딩이 있는 문서를 작성하면 목차가 자동으로 생성됩니다.</p>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        /**
+         * JJANG's MD Editor
+         * 모든 기능이 포함된 단일 파일 마크다운 에디터
+         */
+
+        // DOM 요소 참조
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const exportPdfBtn = document.getElementById('exportPdfBtn');
+        const exportWordBtn = document.getElementById('exportWordBtn');
+
+        const toolbarButtons = document.querySelectorAll('.btn-toolbar');
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        const resizer = document.getElementById('resizer');
+        const editorPanel = document.getElementById('editorPanel');
+        const previewPanel = document.getElementById('previewPanel');
+        const fileInput = document.getElementById('fileInput');
+        const openFileBtn = document.getElementById('openFileBtn');
+        const saveMarkdownBtn = document.getElementById('saveMarkdownBtn');
+        const filenameDisplay = document.getElementById('filenameDisplay');
+        const tocPanel = document.getElementById('tocPanel');
+        const tocContent = document.getElementById('tocContent');
+        const toggleTocBtn = document.getElementById('toggleTocBtn');
+        const toggleSyncBtn = document.getElementById('toggleSyncBtn');
+        const findBtn = document.getElementById('findBtn');
+        const replaceBtn = document.getElementById('replaceBtn');
+        const findReplacePanel = document.getElementById('findReplacePanel');
+        const findInput = document.getElementById('findInput');
+        const replaceInput = document.getElementById('replaceInput');
+        const replaceRow = document.getElementById('replaceRow');
+        const findPrevBtn = document.getElementById('findPrevBtn');
+        const findNextBtn = document.getElementById('findNextBtn');
+        const closeFindBtn = document.getElementById('closeFindBtn');
+        const findCount = document.getElementById('findCount');
+        const replaceOneBtn = document.getElementById('replaceOneBtn');
+        const replaceAllBtn = document.getElementById('replaceAllBtn');
+
+        // 히스토리 관리 (Undo/Redo)
+        let history = [];
+        let historyIndex = -1;
+        let isRestoringState = false;
+
+        // 현재 파일명
+        let currentFilename = 'untitled.md';
+
+        // 스크롤 동기화 상태
+        let isSyncEnabled = true;
+        let isSyncingScroll = false;
+
+        // TOC 패널 표시 상태
+        let isTocVisible = false;
+
+        // 찾기/바꾸기 상태
+        let findMatches = [];
+        let currentMatchIndex = -1;
+
+        // 초기 데모 텍스트
+        const initialText = `# 환영합니다! JJANG's MD Editor에 오신 것을 환영합니다 👋
+
+## 주요 기능
+
+이 에디터는 다음과 같은 기능을 제공합니다:
+
+- **실시간 미리보기**: 왼쪽에 입력하면 오른쪽에 즉시 렌더링됩니다
+- **자동 목차 생성**: 툴바의 목차 버튼을 클릭하면 자동으로 목차가 생성됩니다
+- **수학 수식 지원**: LaTeX 문법으로 수식을 작성하고 KaTeX로 렌더링됩니다
+- **스크롤 동기화**: 왼쪽/오른쪽 창의 스크롤이 자동으로 동기화됩니다
+- **강력한 툴바**: 마크다운 문법을 쉽게 삽입할 수 있습니다
+- **PDF 내보내기**: 작성한 문서를 PDF로 저장할 수 있습니다
+- **Word 내보내기**: .doc 파일로도 저장 가능합니다
+
+## 마크다운 문법 예제
+
+### 텍스트 스타일
+
+**굵은 텍스트**는 별표 두 개로 감싸면 됩니다.
+*기울임 텍스트*는 별표 하나로 감싸면 됩니다.
+~~취소선 텍스트~~는 물결표 두 개로 감싸면 됩니다.
+
+### 목록
+
+순서 없는 목록:
+- 항목 1
+- 항목 2
+  - 하위 항목 2.1
+  - 하위 항목 2.2
+- 항목 3
+
+순서 있는 목록:
+1. 첫 번째
+2. 두 번째
+3. 세 번째
+
+### 코드
+
+인라인 코드: \`const hello = "world";\`
+
+코드 블록:
+\`\`\`javascript
+function greet(name) {
+    return \`Hello, \${name}!\`;
+}
+
+console.log(greet("Markdown"));
+\`\`\`
+
+### 인용구
+
+> "훌륭한 소프트웨어는 훌륭한 도구에서 시작됩니다."
+> - 익명
+
+### 수학 수식 (KaTeX)
+
+인라인 수식: 질량-에너지 등가 원리는 $E = mc^2$ 입니다.
+
+복잡한 수식 (줄바꿈 지원):
+$ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} $
+
+이차방정식의 해:
+$ x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} $
+
+### 링크와 이미지
+
+[마크다운 가이드](https://www.markdownguide.org/)
+
+---
+
+## 시작하기
+
+지금 바로 왼쪽 에디터에서 이 텍스트를 수정해보세요!
+툴바의 버튼들을 클릭하여 마크다운 문법을 쉽게 삽입할 수 있습니다.
+
+완성된 문서는 상단의 **PDF 내보내기** 또는 **Word 내보내기** 버튼을 클릭하여 저장하세요.
+
+Happy Writing! ✍️`;
+
+        /**
+         * 히스토리에 현재 상태 저장
+         */
+        function saveToHistory() {
+            if (isRestoringState) return;
+
+            const currentState = {
+                text: editor.value,
+                selectionStart: editor.selectionStart,
+                selectionEnd: editor.selectionEnd
+            };
+
+            // 현재 인덱스 이후의 히스토리 제거
+            history = history.slice(0, historyIndex + 1);
+
+            // 새로운 상태 추가
+            history.push(currentState);
+            historyIndex++;
+
+            // 히스토리 크기 제한 (최대 100개)
+            if (history.length > 100) {
+                history.shift();
+                historyIndex--;
+            }
+
+            updateUndoRedoButtons();
+        }
+
+        /**
+         * Undo/Redo 버튼 상태 업데이트
+         */
+        function updateUndoRedoButtons() {
+            undoBtn.disabled = historyIndex <= 0;
+            redoBtn.disabled = historyIndex >= history.length - 1;
+        }
+
+        /**
+         * 되돌리기 (Undo)
+         */
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                restoreState(history[historyIndex]);
+            }
+        }
+
+        /**
+         * 다시실행 (Redo)
+         */
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                restoreState(history[historyIndex]);
+            }
+        }
+
+        /**
+         * 상태 복원
+         */
+        function restoreState(state) {
+            isRestoringState = true;
+            editor.value = state.text;
+            editor.selectionStart = state.selectionStart;
+            editor.selectionEnd = state.selectionEnd;
+            updatePreview();
+            updateUndoRedoButtons();
+            isRestoringState = false;
+        }
+
+        /**
+         * 초기화 함수
+         * CDN 라이브러리 로드 확인 및 에러 처리
+         */
+        function initialize() {
+            try {
+                // Marked.js 로드 확인
+                if (typeof marked === 'undefined') {
+                    throw new Error('Marked.js 라이브러리를 로드할 수 없습니다.');
+                }
+
+                // DOMPurify 로드 확인
+                if (typeof DOMPurify === 'undefined') {
+                    throw new Error('DOMPurify 라이브러리를 로드할 수 없습니다.');
+                }
+
+                // html2pdf.js 로드 확인
+                if (typeof html2pdf === 'undefined') {
+                    throw new Error('html2pdf.js 라이브러리를 로드할 수 없습니다.');
+                }
+
+                // Marked.js 옵션 설정
+                marked.setOptions({
+                    breaks: true,  // 줄바꿈을 <br>로 변환
+                    gfm: true,     // GitHub Flavored Markdown 활성화
+                    headerIds: true,
+                    mangle: false,
+                    smartLists: true,
+                    smartypants: false
+                });
+
+                // 초기 텍스트 설정 및 렌더링
+                editor.value = initialText;
+                updatePreview();
+
+                // 초기 상태를 히스토리에 저장
+                saveToHistory();
+
+                // 드래그 앤 드롭 설정
+                setupDragAndDrop();
+
+                console.log('✅ Markdown Editor 초기화 완료');
+
+            } catch (error) {
+                console.error('❌ 초기화 오류:', error);
+                alert('에디터 초기화 중 오류가 발생했습니다:\n' + error.message);
+            }
+        }
+
+        /**
+         * 목차(TOC) 생성
+         * 코드 블록 내부의 TOC 주석과 헤딩은 무시
+         */
+        function generateTOC(markdownText) {
+            // 코드 블록을 먼저 플레이스홀더로 치환
+            const codeBlocks = [];
+            let codeBlockIndex = 0;
+            let textWithoutCode = markdownText;
+
+            // 백틱 코드 블록 추출 (```...```)
+            textWithoutCode = textWithoutCode.replace(/```[\s\S]*?```/g, (match) => {
+                const placeholder = `___TOC_CODE_BLOCK_${codeBlockIndex}___`;
+                codeBlocks.push({ placeholder, content: match });
+                codeBlockIndex++;
+                return placeholder;
+            });
+
+            // 인라인 코드 추출 (`...`)
+            textWithoutCode = textWithoutCode.replace(/`[^`\n]+?`/g, (match) => {
+                const placeholder = `___TOC_INLINE_CODE_${codeBlockIndex}___`;
+                codeBlocks.push({ placeholder, content: match });
+                codeBlockIndex++;
+                return placeholder;
+            });
+
+            // 코드 블록이 제거된 텍스트에서 TOC 주석 찾기
+            const tocRegex = /<!--\s*TOC\s*-->([\s\S]*?)<!--\s*\/TOC\s*-->/i;
+
+            // TOC 주석이 없으면 코드 블록 복원 후 반환
+            if (!tocRegex.test(textWithoutCode)) {
+                // 코드 블록 복원
+                codeBlocks.forEach(({ placeholder, content }) => {
+                    textWithoutCode = textWithoutCode.replace(placeholder, content);
+                });
+                return textWithoutCode;
+            }
+
+            // 헤딩 추출 (코드 블록이 제거된 텍스트에서)
+            const headings = [];
+            const lines = textWithoutCode.split('\n');
+
+            lines.forEach((line, index) => {
+                const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+                if (headingMatch) {
+                    const level = headingMatch[1].length;
+                    const text = headingMatch[2].trim();
+                    const id = text.toLowerCase()
+                        .replace(/[^\w\s가-힣-]/g, '')
+                        .replace(/\s+/g, '-');
+
+                    headings.push({ level, text, id });
+                }
+            });
+
+            // TOC HTML 생성
+            let tocHtml = '\n';
+            headings.forEach(heading => {
+                const indent = '  '.repeat(heading.level - 1);
+                tocHtml += `${indent}- [${heading.text}](#${heading.id})\n`;
+            });
+
+            // TOC 주석 사이에 목차 삽입 (코드 블록이 제거된 텍스트에서)
+            let result = textWithoutCode.replace(tocRegex, `<!-- TOC -->${tocHtml}<!-- /TOC -->`);
+
+            // 코드 블록 복원
+            codeBlocks.forEach(({ placeholder, content }) => {
+                result = result.replace(placeholder, content);
+            });
+
+            return result;
+        }
+
+        /**
+         * 수식 렌더링 (KaTeX)
+         * 플레이스홀더 방식으로 처리
+         */
+        function processMath(markdownText) {
+            if (typeof katex === 'undefined') {
+                console.warn('⚠️ KaTeX 라이브러리가 로드되지 않았습니다.');
+                return { text: markdownText, mathBlocks: [] };
+            }
+
+            const mathBlocks = [];
+            let index = 0;
+
+            try {
+                // 블록 수식 추출 및 플레이스홀더로 치환 ($$...$$)
+                // 여러 줄 지원
+                markdownText = markdownText.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
+                    try {
+                        const rendered = katex.renderToString(math.trim(), {
+                            displayMode: true,
+                            throwOnError: false
+                        });
+                        const placeholder = `<span class="math-placeholder-block" data-math-id="${index}"></span>`;
+                        mathBlocks.push({ placeholder, html: rendered, type: 'block', id: index });
+                        index++;
+                        return placeholder;
+                    } catch (e) {
+                        console.error('❌ 블록 수식 렌더링 오류:', e);
+                        return match;
+                    }
+                });
+
+                // 인라인 수식 추출 및 플레이스홀더로 치환 ($...$)
+                // 줄바꿈 허용하되, $ 문자는 제외 (중첩 방지)
+                markdownText = markdownText.replace(/\$([^$]+?)\$/g, (match, math) => {
+                    try {
+                        const rendered = katex.renderToString(math.trim(), {
+                            displayMode: false,
+                            throwOnError: false
+                        });
+                        const placeholder = `<span class="math-placeholder-inline" data-math-id="${index}"></span>`;
+                        mathBlocks.push({ placeholder, html: rendered, type: 'inline', id: index });
+                        index++;
+                        return placeholder;
+                    } catch (e) {
+                        console.error('❌ 인라인 수식 렌더링 오류:', e);
+                        return match;
+                    }
+                });
+
+                return { text: markdownText, mathBlocks };
+            } catch (error) {
+                console.error('❌ 수식 렌더링 오류:', error);
+                return { text: markdownText, mathBlocks: [] };
+            }
+        }
+
+        /**
+         * 플레이스홀더를 실제 렌더링된 수식으로 교체
+         */
+        function replaceMathPlaceholders(html, mathBlocks) {
+            mathBlocks.forEach(({ id, html: mathHtml, type }) => {
+                const wrappedHtml = type === 'block'
+                    ? `<div class="math-block">${mathHtml}</div>`
+                    : `<span class="math-inline">${mathHtml}</span>`;
+
+                // span 플레이스홀더를 찾아서 교체
+                const placeholderClass = type === 'block' ? 'math-placeholder-block' : 'math-placeholder-inline';
+                const regex = new RegExp(
+                    `<span class="${placeholderClass}" data-math-id="${id}"><\\/span>`,
+                    'g'
+                );
+                html = html.replace(regex, wrappedHtml);
+            });
+            return html;
+        }
+
+        /**
+         * 실시간 미리보기 업데이트
+         */
+        function updatePreview() {
+            try {
+                let markdownText = editor.value;
+
+                // TOC 자동 생성
+                markdownText = generateTOC(markdownText);
+
+                // 수식을 플레이스홀더로 치환
+                const { text, mathBlocks } = processMath(markdownText);
+
+                // 마크다운 파싱 후 신뢰할 수 없는 HTML과 URL 속성 제거
+                let htmlContent = DOMPurify.sanitize(marked.parse(text), {
+                    FORBID_TAGS: ['form', 'input', 'button', 'textarea', 'select', 'option', 'style'],
+                    FORBID_ATTR: ['style', 'srcdoc']
+                });
+
+                // 플레이스홀더를 렌더링된 수식으로 교체
+                htmlContent = replaceMathPlaceholders(htmlContent, mathBlocks);
+
+                preview.innerHTML = htmlContent;
+
+                // 새 창 링크의 opener 접근 차단
+                preview.querySelectorAll('a[target="_blank"]').forEach(link => {
+                    link.rel = 'noopener noreferrer';
+                });
+
+                // 목차 업데이트
+                updateTOC();
+
+            } catch (error) {
+                console.error('❌ 마크다운 파싱 오류:', error);
+                preview.innerHTML = '<p class="text-red-600">마크다운 렌더링 중 오류가 발생했습니다.</p>';
+            }
+        }
+
+        /**
+         * 목차(TOC) 업데이트
+         */
+        function updateTOC() {
+            try {
+                // 프리뷰에서 모든 헤딩 추출
+                const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                tocContent.replaceChildren();
+
+                if (headings.length === 0) {
+                    const emptyMessage = document.createElement('p');
+                    emptyMessage.className = 'text-gray-500 text-xs';
+                    emptyMessage.textContent = '헤딩이 있는 문서를 작성하면 목차가 자동으로 생성됩니다.';
+                    tocContent.appendChild(emptyMessage);
+                    return;
+                }
+
+                // 사용자 입력을 HTML 문자열로 재해석하지 않도록 DOM API로 목차 생성
+                const tocList = document.createElement('ul');
+                tocList.className = 'space-y-1';
+
+                headings.forEach((heading, index) => {
+                    const level = parseInt(heading.tagName[1]); // H1 -> 1, H2 -> 2, ...
+                    const text = heading.textContent;
+                    const id = `heading-${index}`;
+
+                    // 헤딩에 ID 추가 (스크롤 이동용)
+                    heading.id = id;
+
+                    // 들여쓰기 레벨
+                    const indent = (level - 1) * 12;
+
+                    const listItem = document.createElement('li');
+                    listItem.style.marginLeft = `${indent}px`;
+
+                    const link = document.createElement('a');
+                    link.href = `#${id}`;
+                    link.className = 'toc-link text-gray-700 hover:text-blue-600 hover:underline block py-1';
+                    link.dataset.headingId = id;
+                    link.textContent = text;
+
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const headingId = link.dataset.headingId;
+                        const headingElement = document.getElementById(headingId);
+                        if (headingElement) {
+                            // 스크롤 동기화 임시 해제
+                            const wasSyncEnabled = isSyncEnabled;
+                            isSyncEnabled = false;
+
+                            // 헤딩 위치로 스크롤
+                            headingElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                            // 1초 후 동기화 복원
+                            setTimeout(() => {
+                                isSyncEnabled = wasSyncEnabled;
+                            }, 1000);
+                        }
+                    });
+
+                    listItem.appendChild(link);
+                    tocList.appendChild(listItem);
+                });
+
+                tocContent.appendChild(tocList);
+            } catch (error) {
+                console.error('❌ 목차 업데이트 오류:', error);
+            }
+        }
+
+        /**
+         * 에디터에 마크다운 문법 삽입
+         * @param {string} action - 수행할 액션 (bold, italic, h1, h2, ul, ol, code, quote)
+         */
+        function insertMarkdown(action) {
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            const selectedText = editor.value.substring(start, end);
+            const beforeText = editor.value.substring(0, start);
+            const afterText = editor.value.substring(end);
+
+            let newText = '';
+            let cursorOffset = 0;
+
+            switch(action) {
+                case 'bold':
+                    newText = `**${selectedText || '굵은 텍스트'}**`;
+                    cursorOffset = selectedText ? newText.length : 2;
+                    break;
+
+                case 'italic':
+                    newText = `*${selectedText || '기울임 텍스트'}*`;
+                    cursorOffset = selectedText ? newText.length : 1;
+                    break;
+
+                case 'h1':
+                    newText = `# ${selectedText || '제목 1'}`;
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'h2':
+                    newText = `## ${selectedText || '제목 2'}`;
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'ul':
+                    if (selectedText) {
+                        const lines = selectedText.split('\n');
+                        newText = lines.map(line => `- ${line}`).join('\n');
+                    } else {
+                        newText = '- 목록 항목';
+                    }
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'ol':
+                    if (selectedText) {
+                        const lines = selectedText.split('\n');
+                        newText = lines.map((line, index) => `${index + 1}. ${line}`).join('\n');
+                    } else {
+                        newText = '1. 목록 항목';
+                    }
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'code':
+                    if (selectedText.includes('\n')) {
+                        newText = `\`\`\`\n${selectedText}\n\`\`\``;
+                        cursorOffset = newText.length - 4;
+                    } else {
+                        newText = `\`${selectedText || '코드'}\``;
+                        cursorOffset = selectedText ? newText.length : 1;
+                    }
+                    break;
+
+                case 'quote':
+                    if (selectedText) {
+                        const lines = selectedText.split('\n');
+                        newText = lines.map(line => `> ${line}`).join('\n');
+                    } else {
+                        newText = '> 인용구';
+                    }
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'toc':
+                    newText = '<!-- TOC -->\n자동으로 생성될 위치\n<!-- /TOC -->';
+                    cursorOffset = newText.length;
+                    break;
+
+                case 'math':
+                    if (selectedText) {
+                        // 여러 줄이면 블록 수식, 한 줄이면 인라인 수식
+                        if (selectedText.includes('\n')) {
+                            newText = `$$\n${selectedText}\n$$`;
+                        } else {
+                            newText = `$${selectedText}$`;
+                        }
+                    } else {
+                        newText = '$E = mc^2$';
+                    }
+                    cursorOffset = selectedText ? newText.length : 1;
+                    break;
+
+                default:
+                    return;
+            }
+
+            // 텍스트 업데이트
+            editor.value = beforeText + newText + afterText;
+
+            // 커서 위치 설정
+            if (selectedText) {
+                editor.selectionStart = editor.selectionEnd = start + cursorOffset;
+            } else {
+                editor.selectionStart = start + cursorOffset;
+                editor.selectionEnd = start + cursorOffset;
+            }
+
+            // 포커스 및 미리보기 업데이트
+            editor.focus();
+            updatePreview();
+
+            // 히스토리에 저장
+            saveToHistory();
+        }
+
+        /**
+         * PDF로 내보내기
+         */
+        async function exportToPDF() {
+            // 원본 스타일 백업
+            const originalOverflow = preview.style.overflow;
+            const originalHeight = preview.style.height;
+            const originalMaxHeight = preview.style.maxHeight;
+
+            try {
+                // 로딩 상태 표시
+                exportPdfBtn.classList.add('loading');
+                exportPdfBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="ml-2">생성 중...</span>';
+
+                console.log('📄 PDF 생성 시작...');
+                console.log('Preview 내용:', preview.innerHTML.substring(0, 100));
+
+                // preview 요소의 overflow 임시 제거 (전체 콘텐츠 표시)
+                preview.style.overflow = 'visible';
+                preview.style.height = 'auto';
+                preview.style.maxHeight = 'none';
+
+                // DOM 업데이트 대기
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                console.log('Preview 크기:', preview.scrollWidth, 'x', preview.scrollHeight);
+
+                // PDF 생성 옵션
+                const opt = {
+                    margin: [10, 10, 10, 10],
+                    filename: currentFilename.replace(/\.md$/, '.pdf') || 'document.pdf',
+                    image: {
+                        type: 'jpeg',
+                        quality: 0.95
+                    },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        logging: true,
+                        backgroundColor: '#ffffff',
+                        windowHeight: preview.scrollHeight,
+                        height: preview.scrollHeight
+                    },
+                    jsPDF: {
+                        unit: 'mm',
+                        format: 'a4',
+                        orientation: 'portrait'
+                    }
+                };
+
+                // PDF 생성
+                console.log('html2pdf 시작...');
+                const pdfBlob = await html2pdf().from(preview).set(opt).outputPdf('blob');
+
+                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: opt.filename,
+                        types: [{
+                            description: 'PDF Files',
+                            accept: { 'application/pdf': ['.pdf'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(pdfBlob);
+                    await writable.close();
+                } else {
+                    // 폴백: 자동 다운로드
+                    const url = URL.createObjectURL(pdfBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = opt.filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }
+
+                console.log('✅ PDF 내보내기 완료');
+
+            } catch (error) {
+                if (error.name === 'AbortError') return; // 사용자 취소
+                console.error('❌ PDF 내보내기 오류:', error);
+                console.error('에러 상세:', error.stack);
+                alert('PDF 생성 중 오류가 발생했습니다:\n' + error.message);
+            } finally {
+                // 원본 스타일 복원
+                preview.style.overflow = originalOverflow;
+                preview.style.height = originalHeight;
+                preview.style.maxHeight = originalMaxHeight;
+
+                // 로딩 상태 해제
+                exportPdfBtn.classList.remove('loading');
+                exportPdfBtn.innerHTML = '<i class="fas fa-file-pdf"></i><span class="ml-2">PDF</span>';
+            }
+        }
+
+        /**
+         * Word(.doc)로 내보내기
+         * HTML을 .doc 형식으로 변환하는 방식 사용
+         */
+        async function exportToWord() {
+            try {
+                // 로딩 상태 표시
+                exportWordBtn.classList.add('loading');
+                exportWordBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="ml-2">생성 중...</span>';
+
+                // 프리뷰 HTML 가져오기
+                const previewContent = preview.innerHTML;
+
+                // Word 문서용 HTML 생성 (스타일 포함)
+                const htmlContent = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        <style>
+                            body {
+                                font-family: 'Malgun Gothic', Arial, sans-serif;
+                                line-height: 1.6;
+                                max-width: 800px;
+                                margin: 0 auto;
+                                padding: 20px;
+                            }
+                            h1 { font-size: 2em; margin-bottom: 0.5em; }
+                            h2 { font-size: 1.5em; margin-top: 1em; margin-bottom: 0.5em; }
+                            h3 { font-size: 1.25em; margin-top: 1em; margin-bottom: 0.5em; }
+                            p { margin: 1em 0; }
+                            ul, ol { margin: 1em 0; padding-left: 2em; }
+                            code {
+                                background-color: #f0f0f0;
+                                padding: 2px 6px;
+                                border-radius: 3px;
+                                font-family: 'Courier New', monospace;
+                            }
+                            pre {
+                                background-color: #f5f5f5;
+                                padding: 1em;
+                                border-radius: 5px;
+                                overflow-x: auto;
+                            }
+                            pre code {
+                                background-color: transparent;
+                                padding: 0;
+                            }
+                            blockquote {
+                                border-left: 4px solid #ddd;
+                                margin: 1em 0;
+                                padding-left: 1em;
+                                color: #666;
+                            }
+                            table {
+                                border-collapse: collapse;
+                                width: 100%;
+                                margin: 1em 0;
+                            }
+                            th, td {
+                                border: 1px solid #333;
+                                padding: 8px 12px;
+                                text-align: left;
+                            }
+                            th {
+                                background-color: #f0f0f0;
+                                font-weight: bold;
+                            }
+                            del, s {
+                                text-decoration: line-through;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        ${previewContent}
+                    </body>
+                    </html>
+                `;
+
+                // Blob 생성
+                const blob = new Blob(['\ufeff', htmlContent], {
+                    type: 'application/msword'
+                });
+
+                const wordFilename = currentFilename.replace(/\.md$/, '.doc') || 'markdown-document.doc';
+
+                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: wordFilename,
+                        types: [{
+                            description: 'Word Documents',
+                            accept: { 'application/msword': ['.doc'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                } else {
+                    // 폴백: 자동 다운로드
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
                     link.href = url;
