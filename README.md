@@ -5,13 +5,14 @@ JJANG's MD Editor - 별도의 빌드 과정 없이 즉시 실행 가능한 단�
 ![Markdown Editor](https://img.shields.io/badge/Markdown-Editor-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Build](https://img.shields.io/badge/build-standalone-brightgreen)
+![CI](https://github.com/jjangkor/md_editor/actions/workflows/ci.yml/badge.svg)
 
 ## 주요 특징
 
 - ✅ **단일 HTML 파일**: 모든 코드가 하나의 `md_editor.html` 파일에 포함
 - ✅ **빌드 불필요**: 브라우저에서 바로 실행 가능
 - ✅ **CDN 기반**: 모든 라이브러리를 CDN으로 로드하여 별도 설치 불필요
-- ✅ **반응형 레이아웃**: 고정 100vh 레이아웃으로 스크롤 없는 깔끔한 UI
+- ✅ **반응형 레이아웃**: 데스크톱 가로 분할과 모바일 세로 분할 자동 전환
 - ✅ **실시간 미리보기**: 입력과 동시에 마크다운 렌더링
 - ✅ **스크롤 동기화**: 에디터와 프리뷰 창의 스크롤 자동 동기화
 - ✅ **자동 목차 생성**: `&lt;!-- TOC --&gt;` 주석으로 자동 목차 생성
@@ -195,9 +196,13 @@ $$
 ### 파일 구조
 
 ```
-claude-github-test/
-├── md_editor.html     # 단일 HTML 파일 (모든 코드 포함)
-└── README.md          # 프로젝트 문서 (본 파일)
+md_editor/
+├── .github/workflows/ci.yml  # 자동 검증
+├── tests/editor.test.js      # 회귀 테스트
+├── md_editor.html            # 단일 실행 파일 (모든 앱 코드 포함)
+├── package.json              # 테스트 명령
+├── LICENSE                   # MIT 라이선스
+└── README.md                 # 프로젝트 문서
 ```
 
 ## 설치 및 실행
@@ -258,6 +263,16 @@ npx http-server -p 8000
    - **MD 저장**: 마크다운 파일로 저장
    - **PDF**: PDF 문서로 내보내기
    - **Word**: Word 문서(.doc)로 내보내기
+
+## 개발 및 검증
+
+앱 실행에는 빌드가 필요하지 않습니다. 기여 전 정적 회귀 테스트는 Node.js 22 이상에서 실행할 수 있습니다.
+
+```bash
+npm test
+```
+
+테스트는 inline JavaScript 문법, Markdown 정화 경로, TOC ID 일치, 표에 포함된 통화·퍼센트 예제, 반응형 및 포인터 리사이저 구성을 확인합니다.
 
 ### 마크다운 문법 예제
 
@@ -379,7 +394,7 @@ function hello() {
 
 ## 라이선스
 
-MIT License
+[MIT License](LICENSE)
 
 ## 기여
 
@@ -400,6 +415,15 @@ MIT License
 **Made with ❤️ using Vanilla JavaScript, Tailwind CSS, and Marked.js**
 
 ## 업데이트 이력
+
+### 2026-07-14
+
+- **Markdown 렌더링 보안 강화**: DOMPurify를 적용하고 TOC를 안전한 DOM API로 생성
+- **TOC 링크 수정**: 자동 생성 링크와 실제 프리뷰 헤딩 ID를 일치시킴
+- **표 안 특수문자 처리 개선**: 단일 `$`와 일반 `%`를 보존하고 인라인 수식은 `\(...\)`로 명확히 구분
+- **코드 영역 보호**: 코드 블록과 인라인 코드 내부의 수식 구분자를 변환하지 않음
+- **반응형 레이아웃 개선**: 모바일 세로 분할, 터치·펜 포인터 및 키보드 리사이저 지원
+- **CI 추가**: GitHub Actions에서 보안·TOC·수식·반응형 회귀 테스트 실행
 
 ### 2026-03-08
 
