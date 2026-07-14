@@ -659,13 +659,15 @@ console.log(greet("Markdown"));
 
 ### 수학 수식 (KaTeX)
 
-인라인 수식: 질량-에너지 등가 원리는 $E = mc^2$ 입니다.
+인라인 수식: 질량-에너지 등가 원리는 \\(E = mc^2\\) 입니다.
 
 복잡한 수식 (줄바꿈 지원):
-$ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} $
+$$
+\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}
+$$
 
 이차방정식의 해:
-$ x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} $
+\\(x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\\)
 
 ### 링크와 이미지
 
@@ -847,9 +849,7 @@ Happy Writing! ✍️`;
                 if (headingMatch) {
                     const level = headingMatch[1].length;
                     const text = headingMatch[2].trim();
-                    const id = text.toLowerCase()
-                        .replace(/[^\w\s가-힣-]/g, '')
-                        .replace(/\s+/g, '-');
+                    const id = `heading-${headings.length}`;
 
                     headings.push({ level, text, id });
                 }
@@ -883,10 +883,22 @@ Happy Writing! ✍️`;
                 return { text: markdownText, mathBlocks: [] };
             }
 
+            const originalText = markdownText;
             const mathBlocks = [];
+            const codeSegments = [];
             let index = 0;
 
             try {
+                // 코드 블록과 인라인 코드는 수식 처리에서 제외
+                markdownText = markdownText.replace(
+                    /```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`/g,
+                    (match) => {
+                        const placeholder = `\uE000CODE_SEGMENT_${codeSegments.length}\uE001`;
+                        codeSegments.push({ placeholder, content: match });
+                        return placeholder;
+                    }
+                );
+
                 // 블록 수식 추출 및 플레이스홀더로 치환 ($$...$$)
                 // 여러 줄 지원
                 markdownText = markdownText.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
@@ -905,9 +917,9 @@ Happy Writing! ✍️`;
                     }
                 });
 
-                // 인라인 수식 추출 및 플레이스홀더로 치환 ($...$)
-                // 줄바꿈 허용하되, $ 문자는 제외 (중첩 방지)
-                markdownText = markdownText.replace(/\$([^$]+?)\$/g, (match, math) => {
+                // 인라인 수식 추출 및 플레이스홀더로 치환 (\(...\))
+                // 단일 $는 통화 기호로 보존하고 인라인 수식은 명시적 구분자만 허용
+                markdownText = markdownText.replace(/\\\(([^\n]+?)\\\)/g, (match, math) => {
                     try {
                         const rendered = katex.renderToString(math.trim(), {
                             displayMode: false,
@@ -923,10 +935,15 @@ Happy Writing! ✍️`;
                     }
                 });
 
+                // 보호했던 코드 영역 복원
+                codeSegments.forEach(({ placeholder, content }) => {
+                    markdownText = markdownText.split(placeholder).join(content);
+                });
+
                 return { text: markdownText, mathBlocks };
             } catch (error) {
                 console.error('❌ 수식 렌더링 오류:', error);
-                return { text: markdownText, mathBlocks: [] };
+                return { text: originalText, mathBlocks: [] };
             }
         }
 
@@ -1144,10 +1161,10 @@ Happy Writing! ✍️`;
                         if (selectedText.includes('\n')) {
                             newText = `$$\n${selectedText}\n$$`;
                         } else {
-                            newText = `$${selectedText}$`;
+                            newText = `\\(${selectedText}\\)`;
                         }
                     } else {
-                        newText = '$E = mc^2$';
+                        newText = '\\(E = mc^2\\)';
                     }
                     cursorOffset = selectedText ? newText.length : 1;
                     break;
