@@ -223,7 +223,8 @@
         }
 
         /* 리사이저 스타일 */
-        .resizer {
+        .resizer,
+        .toc-resizer {
             width: 5px;
             background-color: #d1d5db;
             cursor: col-resize;
@@ -232,12 +233,18 @@
             touch-action: none;
         }
 
-        .resizer:hover {
+        .resizer:hover,
+        .toc-resizer:hover {
             background-color: #9ca3af;
         }
 
-        .resizer:active {
+        .resizer:active,
+        .toc-resizer:active {
             background-color: #6b7280;
+        }
+
+        .toc-resizer {
+            display: none;
         }
 
         /* 비활성화된 버튼 스타일 */
@@ -345,7 +352,8 @@
                 width: 100%;
             }
 
-            .resizer {
+            .resizer,
+            .toc-resizer {
                 width: 100%;
                 height: 6px;
                 cursor: row-resize;
@@ -353,7 +361,7 @@
 
             #tocPanel {
                 width: 100% !important;
-                max-height: 40%;
+                max-height: 50%;
                 border-left: 0;
                 border-top: 1px solid #d1d5db;
             }
@@ -538,7 +546,7 @@
         <!-- 메인 영역: 크기 조절 가능한 분할 -->
         <main class="editor-workspace flex-1 flex overflow-hidden">
             <!-- 왼쪽: 에디터 영역 -->
-            <div id="editorPanel" class="bg-gray-50 flex flex-col" style="flex: 7;">
+            <div id="editorPanel" class="bg-gray-50 flex flex-col" style="flex: 1;">
                 <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
                     <i class="fas fa-edit mr-2"></i>Editor
                 </div>
@@ -566,8 +574,15 @@
                 </div>
             </div>
 
+            <!-- 목차 패널 리사이저 -->
+            <div id="tocResizer" class="toc-resizer"
+                 role="separator"
+                 aria-label="미리보기와 목차 크기 조절"
+                 aria-orientation="vertical"
+                 tabindex="0"></div>
+
             <!-- 목차 패널 (기본 숨김) -->
-            <div id="tocPanel" class="bg-gray-50 border-l border-gray-300" style="width: 250px; display: none; flex-direction: column;">
+            <div id="tocPanel" class="bg-gray-50 border-l border-gray-300" style="width: 250px; display: none; flex: 0 0 250px; flex-direction: column;">
                 <div class="px-4 py-2 bg-gray-100 border-b border-gray-300 font-semibold text-gray-700">
                     <i class="fas fa-list mr-2"></i>목차 (TOC)
                 </div>
@@ -603,6 +618,7 @@
         const saveMarkdownBtn = document.getElementById('saveMarkdownBtn');
         const filenameDisplay = document.getElementById('filenameDisplay');
         const tocPanel = document.getElementById('tocPanel');
+        const tocResizer = document.getElementById('tocResizer');
         const tocContent = document.getElementById('tocContent');
         const toggleTocBtn = document.getElementById('toggleTocBtn');
         const toggleSyncBtn = document.getElementById('toggleSyncBtn');
@@ -1668,6 +1684,7 @@ Happy Writing! ✍️`;
 
         // 리사이저 드래그 및 키보드 조절 기능
         let isResizing = false;
+        let isTocResizing = false;
         let wasNarrowLayout = window.matchMedia('(max-width: 767px)').matches;
 
         function isNarrowLayout() {
@@ -1676,9 +1693,23 @@ Happy Writing! ✍️`;
 
         function applyDefaultPanelSizes() {
             const narrow = isNarrowLayout();
-            editorPanel.style.flex = narrow ? '1 1 50%' : '7 1 0%';
+            editorPanel.style.flex = narrow ? '1 1 50%' : '1 1 0%';
             previewPanel.style.flex = narrow ? '1 1 50%' : '1 1 0%';
             resizer.setAttribute('aria-orientation', narrow ? 'horizontal' : 'vertical');
+        }
+
+        function applyDefaultTocSize() {
+            const narrow = isNarrowLayout();
+            if (narrow) {
+                tocPanel.style.width = '100%';
+                tocPanel.style.height = '30%';
+                tocPanel.style.flex = '0 0 30%';
+            } else {
+                tocPanel.style.width = '250px';
+                tocPanel.style.height = '';
+                tocPanel.style.flex = '0 0 250px';
+            }
+            tocResizer.setAttribute('aria-orientation', narrow ? 'horizontal' : 'vertical');
         }
 
         function resizePanels(clientX, clientY) {
@@ -1686,7 +1717,10 @@ Happy Writing! ✍️`;
             const containerRect = container.getBoundingClientRect();
             const narrow = isNarrowLayout();
             const tocSize = isTocVisible ? (narrow ? tocPanel.offsetHeight : tocPanel.offsetWidth) : 0;
-            const availableSize = (narrow ? containerRect.height : containerRect.width) - tocSize;
+            const tocDividerSize = isTocVisible
+                ? (narrow ? tocResizer.offsetHeight : tocResizer.offsetWidth)
+                : 0;
+            const availableSize = (narrow ? containerRect.height : containerRect.width) - tocSize - tocDividerSize;
             const editorSize = narrow
                 ? clientY - containerRect.top
                 : clientX - containerRect.left;
@@ -1697,6 +1731,27 @@ Happy Writing! ✍️`;
                 const previewSize = availableSize - editorSize - (narrow ? resizer.offsetHeight : resizer.offsetWidth);
                 editorPanel.style.flex = `0 0 ${editorSize}px`;
                 previewPanel.style.flex = `0 0 ${previewSize}px`;
+            }
+        }
+
+        function resizeToc(clientX, clientY) {
+            const containerRect = editorPanel.parentElement.getBoundingClientRect();
+            const narrow = isNarrowLayout();
+            const tocSize = narrow
+                ? containerRect.bottom - clientY
+                : containerRect.right - clientX;
+            const totalSize = narrow ? containerRect.height : containerRect.width;
+            const minSize = narrow ? 120 : 180;
+            const maxSize = Math.min(narrow ? totalSize * 0.5 : totalSize * 0.45, narrow ? 420 : 520);
+
+            if (tocSize >= minSize && tocSize <= maxSize) {
+                if (narrow) {
+                    tocPanel.style.height = `${tocSize}px`;
+                    tocPanel.style.flex = `0 0 ${tocSize}px`;
+                } else {
+                    tocPanel.style.width = `${tocSize}px`;
+                    tocPanel.style.flex = `0 0 ${tocSize}px`;
+                }
             }
         }
 
@@ -1723,6 +1778,29 @@ Happy Writing! ✍️`;
         resizer.addEventListener('pointerup', stopResizing);
         resizer.addEventListener('pointercancel', stopResizing);
 
+        tocResizer.addEventListener('pointerdown', (e) => {
+            isTocResizing = true;
+            tocResizer.setPointerCapture(e.pointerId);
+            document.body.style.cursor = isNarrowLayout() ? 'row-resize' : 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        tocResizer.addEventListener('pointermove', (e) => {
+            if (!isTocResizing) return;
+            resizeToc(e.clientX, e.clientY);
+        });
+
+        function stopTocResizing() {
+            if (isTocResizing) {
+                isTocResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        }
+
+        tocResizer.addEventListener('pointerup', stopTocResizing);
+        tocResizer.addEventListener('pointercancel', stopTocResizing);
+
         resizer.addEventListener('keydown', (e) => {
             const narrow = isNarrowLayout();
             const decreaseKey = narrow ? 'ArrowUp' : 'ArrowLeft';
@@ -1735,15 +1813,29 @@ Happy Writing! ✍️`;
             resizePanels(rect.left + step, rect.top + step);
         });
 
+        tocResizer.addEventListener('keydown', (e) => {
+            const narrow = isNarrowLayout();
+            const increaseKey = narrow ? 'ArrowUp' : 'ArrowLeft';
+            const decreaseKey = narrow ? 'ArrowDown' : 'ArrowRight';
+            if (e.key !== increaseKey && e.key !== decreaseKey) return;
+
+            e.preventDefault();
+            const rect = tocResizer.getBoundingClientRect();
+            const step = 24 * (e.key === increaseKey ? -1 : 1);
+            resizeToc(rect.left + step, rect.top + step);
+        });
+
         window.addEventListener('resize', () => {
             const narrow = isNarrowLayout();
             if (narrow !== wasNarrowLayout) {
                 wasNarrowLayout = narrow;
                 applyDefaultPanelSizes();
+                applyDefaultTocSize();
             }
         });
 
         applyDefaultPanelSizes();
+        applyDefaultTocSize();
 
         // 스크롤 동기화
         // 에디터 스크롤 -> 프리뷰 스크롤 동기화
@@ -1786,10 +1878,13 @@ Happy Writing! ✍️`;
 
             if (isTocVisible) {
                 // 패널 표시
+                applyDefaultTocSize();
+                tocResizer.style.display = 'block';
                 tocPanel.style.display = 'flex';
                 toggleTocBtn.classList.add('bg-blue-100');
             } else {
                 // 패널 숨김
+                tocResizer.style.display = 'none';
                 tocPanel.style.display = 'none';
                 toggleTocBtn.classList.remove('bg-blue-100');
             }

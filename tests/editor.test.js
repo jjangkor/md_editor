@@ -43,6 +43,15 @@ test('small screens and non-mouse input have resizing support', () => {
   assert.match(html, /addEventListener\('keydown'/);
 });
 
+test('editor and preview start evenly and TOC has its own resizer', () => {
+  assert.match(html, /editorPanel\.style\.flex = narrow \? '1 1 50%' : '1 1 0%'/);
+  assert.match(html, /previewPanel\.style\.flex = narrow \? '1 1 50%' : '1 1 0%'/);
+  assert.match(html, /id="tocResizer"/);
+  assert.match(html, /function resizeToc\(clientX, clientY\)/);
+  assert.match(html, /tocResizer\.addEventListener\('pointerdown'/);
+  assert.match(html, /tocResizer\.addEventListener\('keydown'/);
+});
+
 test('repository includes a real MIT license file', () => {
   assert.ok(fs.existsSync(path.join(root, 'LICENSE')));
 });
