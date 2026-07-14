@@ -16,6 +16,11 @@
     <!-- Marked.js for Markdown Parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
 
+    <!-- DOMPurify for sanitizing rendered Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"
+            integrity="sha384-JEyTNhjM6R1ElGoJns4U2Ln4ofPcqzSsynQkmEc/KGy6336qAZl70tDLufbkla+3"
+            crossorigin="anonymous"></script>
+
     <!-- html2pdf.js for PDF Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
             integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg=="
@@ -757,6 +762,11 @@ Happy Writing! ✍️`;
                     throw new Error('Marked.js 라이브러리를 로드할 수 없습니다.');
                 }
 
+                // DOMPurify 로드 확인
+                if (typeof DOMPurify === 'undefined') {
+                    throw new Error('DOMPurify 라이브러리를 로드할 수 없습니다.');
+                }
+
                 // html2pdf.js 로드 확인
                 if (typeof html2pdf === 'undefined') {
                     throw new Error('html2pdf.js 라이브러리를 로드할 수 없습니다.');
@@ -768,7 +778,6 @@ Happy Writing! ✍️`;
                     gfm: true,     // GitHub Flavored Markdown 활성화
                     headerIds: true,
                     mangle: false,
-                    sanitize: false,  // HTML 태그 허용
                     smartLists: true,
                     smartypants: false
                 });
@@ -954,13 +963,21 @@ Happy Writing! ✍️`;
                 // 수식을 플레이스홀더로 치환
                 const { text, mathBlocks } = processMath(markdownText);
 
-                // 마크다운 파싱
-                let htmlContent = marked.parse(text);
+                // 마크다운 파싱 후 신뢰할 수 없는 HTML과 URL 속성 제거
+                let htmlContent = DOMPurify.sanitize(marked.parse(text), {
+                    FORBID_TAGS: ['form', 'input', 'button', 'textarea', 'select', 'option', 'style'],
+                    FORBID_ATTR: ['style', 'srcdoc']
+                });
 
                 // 플레이스홀더를 렌더링된 수식으로 교체
                 htmlContent = replaceMathPlaceholders(htmlContent, mathBlocks);
 
                 preview.innerHTML = htmlContent;
+
+                // 새 창 링크의 opener 접근 차단
+                preview.querySelectorAll('a[target="_blank"]').forEach(link => {
+                    link.rel = 'noopener noreferrer';
+                });
 
                 // 목차 업데이트
                 updateTOC();
@@ -978,14 +995,20 @@ Happy Writing! ✍️`;
             try {
                 // 프리뷰에서 모든 헤딩 추출
                 const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                tocContent.replaceChildren();
 
                 if (headings.length === 0) {
-                    tocContent.innerHTML = '<p class="text-gray-500 text-xs">헤딩이 있는 문서를 작성하면 목차가 자동으로 생성됩니다.</p>';
+                    const emptyMessage = document.createElement('p');
+                    emptyMessage.className = 'text-gray-500 text-xs';
+                    emptyMessage.textContent = '헤딩이 있는 문서를 작성하면 목차가 자동으로 생성됩니다.';
+                    tocContent.appendChild(emptyMessage);
                     return;
                 }
 
-                // 목차 HTML 생성
-                let tocHTML = '<ul class="space-y-1">';
+                // 사용자 입력을 HTML 문자열로 재해석하지 않도록 DOM API로 목차 생성
+                const tocList = document.createElement('ul');
+                tocList.className = 'space-y-1';
+
                 headings.forEach((heading, index) => {
                     const level = parseInt(heading.tagName[1]); // H1 -> 1, H2 -> 2, ...
                     const text = heading.textContent;
@@ -997,26 +1020,18 @@ Happy Writing! ✍️`;
                     // 들여쓰기 레벨
                     const indent = (level - 1) * 12;
 
-                    tocHTML += `
-                        <li style="margin-left: ${indent}px;">
-                            <a href="#${id}"
-                               class="toc-link text-gray-700 hover:text-blue-600 hover:underline block py-1"
-                               data-heading-id="${id}">
-                                ${text}
-                            </a>
-                        </li>
-                    `;
-                });
-                tocHTML += '</ul>';
+                    const listItem = document.createElement('li');
+                    listItem.style.marginLeft = `${indent}px`;
 
-                tocContent.innerHTML = tocHTML;
+                    const link = document.createElement('a');
+                    link.href = `#${id}`;
+                    link.className = 'toc-link text-gray-700 hover:text-blue-600 hover:underline block py-1';
+                    link.dataset.headingId = id;
+                    link.textContent = text;
 
-                // 목차 링크 클릭 이벤트
-                const tocLinks = tocContent.querySelectorAll('.toc-link');
-                tocLinks.forEach(link => {
                     link.addEventListener('click', (e) => {
                         e.preventDefault();
-                        const headingId = link.getAttribute('data-heading-id');
+                        const headingId = link.dataset.headingId;
                         const headingElement = document.getElementById(headingId);
                         if (headingElement) {
                             // 스크롤 동기화 임시 해제
@@ -1032,7 +1047,12 @@ Happy Writing! ✍️`;
                             }, 1000);
                         }
                     });
+
+                    listItem.appendChild(link);
+                    tocList.appendChild(listItem);
                 });
+
+                tocContent.appendChild(tocList);
             } catch (error) {
                 console.error('❌ 목차 업데이트 오류:', error);
             }
