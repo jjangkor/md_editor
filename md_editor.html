@@ -407,6 +407,12 @@
                     <i class="fas fa-file-word"></i>
                     <span>Word</span>
                 </button>
+                <button id="exportHwpxBtn"
+                        class="bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                        title="한글(.hwpx)로 내보내기 — 발간물(책자) 서식">
+                    <i class="fas fa-file-lines"></i>
+                    <span>한글</span>
+                </button>
             </div>
         </header>
 
@@ -606,6 +612,7 @@
         const preview = document.getElementById('preview');
         const exportPdfBtn = document.getElementById('exportPdfBtn');
         const exportWordBtn = document.getElementById('exportWordBtn');
+        const exportHwpxBtn = document.getElementById('exportHwpxBtn');
 
         const toolbarButtons = document.querySelectorAll('.btn-toolbar');
         const undoBtn = document.getElementById('undoBtn');
@@ -2098,6 +2105,1072 @@ Happy Writing! ✍️`;
             }
         }
 
+        /* ==========================================================
+         * 한글(.hwpx) 내보내기 — 발간물(책자) 서식
+         * 견본 발간물과 같은 디자인(크림색 챕터 표지 + 주황 번호 배지,
+         * 가/나/다 주황 배지 섹션 제목 + 회색 밑줄, 가운데 그림 캡션·출처,
+         * 주황 머리행 표, 하단 중앙 주황 쪽번호)의 OWPML(.hwpx) 패키지를
+         * 외부 라이브러리 없이 브라우저에서 직접 생성한다.
+         * ========================================================== */
+
+        // 발간물 서식 팔레트
+        const HWPX_COLORS = {
+            accent: '#F5A31C',   // 배지·표 머리행·쪽번호 주황
+            title: '#2E5964',    // 챕터 제목 청록
+            heading: '#1F3A4D',  // 섹션 제목·캡션 남색
+            body: '#404040',     // 본문 진회색
+            muted: '#8C8C8C',    // 출처·보조 회색
+            cream: '#FCF3E3',    // 챕터 표지 배경 크림색
+            line: '#DCDCDC',     // 표 가로줄·섹션 밑줄 연회색
+            codeBg: '#F5F5F5',   // 코드 배경
+            white: '#FFFFFF'
+        };
+
+        // 글자 크기 (HWPUNIT, 1pt = 100)
+        const HWPX_SZ = {
+            body: 1100, chapter: 2200, chip: 1600, section: 1400, badge: 1300,
+            h3: 1250, h4: 1150, caption: 1050, source: 950,
+            table: 1000, tableHead: 1050, code: 950, footer: 1000
+        };
+
+        // A4 편집용지 (HWPUNIT = 1/7200 inch): 좌우 20mm·위 20mm·아래 15mm 여백
+        const HWPX_PAGE = { width: 59528, height: 84186, left: 5669, right: 5669, top: 5669, bottom: 4252, header: 4252, footer: 3402 };
+        const HWPX_CONTENT_WIDTH = HWPX_PAGE.width - HWPX_PAGE.left - HWPX_PAGE.right; // 48190
+        const HWPX_MIME = 'application/hwp+zip';
+        const HWPX_FONTS = ['함초롬돋움', '함초롬바탕', '맑은 고딕']; // id 2 = 발간물 서식 글꼴
+        const HWPX_NS = 'xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app"'
+            + ' xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"'
+            + ' xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph"'
+            + ' xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"'
+            + ' xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core"'
+            + ' xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head"'
+            + ' xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history"'
+            + ' xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page"'
+            + ' xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf"'
+            + ' xmlns:dc="http://purl.org/dc/elements/1.1/"'
+            + ' xmlns:opf="http://www.idpf.org/2007/opf/"'
+            + ' xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart"'
+            + ' xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar"'
+            + ' xmlns:epub="http://www.idpf.org/2007/ops"'
+            + ' xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0"';
+        const hwpxEscape = docxEscape;
+
+        /**
+         * 7개 언어축 공통 속성 문자열 생성 (fontRef/ratio/spacing/relSz/offset용)
+         */
+        function hwpxAxes(value) {
+            return ['hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user']
+                .map(axis => axis + '="' + value + '"').join(' ');
+        }
+
+        /**
+         * 문단 모양(paraPr) XML 생성 — 한/글 기본 템플릿과 동일한 구조
+         * (legacyDouble: 한/글 호환용 기본 문단들은 구형 분기 여백이 2배)
+         */
+        function hwpxParaPrXml(id, o) {
+            const margin = mult => '<hh:margin>'
+                + '<hc:intent value="' + (o.intent || 0) * mult + '" unit="HWPUNIT"/>'
+                + '<hc:left value="' + (o.left || 0) * mult + '" unit="HWPUNIT"/>'
+                + '<hc:right value="0" unit="HWPUNIT"/>'
+                + '<hc:prev value="' + (o.prev || 0) * mult + '" unit="HWPUNIT"/>'
+                + '<hc:next value="' + (o.next || 0) * mult + '" unit="HWPUNIT"/>'
+                + '</hh:margin><hh:lineSpacing type="PERCENT" value="' + (o.ls || 160) + '" unit="HWPUNIT"/>';
+            const heading = o.headingSwitch != null
+                ? '<hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2011/paragraph">'
+                    + '<hh:heading type="OUTLINE" idRef="0" level="' + o.headingSwitch + '"/></hp:case>'
+                    + '<hp:default><hh:heading type="NONE" idRef="0" level="0"/></hp:default></hp:switch>'
+                : '<hh:heading type="' + (o.headingLevel != null ? 'OUTLINE' : 'NONE') + '" idRef="0" level="' + (o.headingLevel || 0) + '"/>';
+            const off = o.borderOff || [0, 0, 0, 0];
+            return '<hh:paraPr id="' + id + '" tabPrIDRef="' + (o.tab || 0) + '" condense="' + (o.condense || 0) + '"'
+                + ' fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0" textDir="LTR">'
+                + '<hh:align horizontal="' + (o.align || 'JUSTIFY') + '" vertical="BASELINE"/>'
+                + heading
+                + '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="' + (o.breakNL || 'BREAK_WORD') + '"'
+                + ' widowOrphan="0" keepWithNext="' + (o.keepWithNext ? 1 : 0) + '" keepLines="0"'
+                + ' pageBreakBefore="' + (o.pageBreakBefore ? 1 : 0) + '" lineWrap="BREAK"/>'
+                + '<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
+                + '<hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar">'
+                + margin(1) + '</hp:case><hp:default>' + margin(o.legacyDouble ? 2 : 1) + '</hp:default></hp:switch>'
+                + '<hh:border borderFillIDRef="' + (o.borderBf || 2) + '" offsetLeft="' + off[0] + '" offsetRight="' + off[1] + '"'
+                + ' offsetTop="' + off[2] + '" offsetBottom="' + off[3] + '" connect="' + (o.connect ? 1 : 0) + '" ignoreMargin="0"/>'
+                + '</hh:paraPr>';
+        }
+
+        /**
+         * 글자 모양(charPr) XML 생성
+         */
+        function hwpxCharPrXml(id, o) {
+            const underline = o.underline
+                ? '<hh:underline type="BOTTOM" shape="SOLID" color="' + (o.color || '#000000') + '"/>'
+                : '<hh:underline type="NONE" shape="SOLID" color="#000000"/>';
+            return '<hh:charPr id="' + id + '" height="' + o.size + '" textColor="' + (o.color || '#000000') + '"'
+                + ' shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="' + (o.shadeBf || 2) + '">'
+                + '<hh:fontRef ' + hwpxAxes(o.font != null ? o.font : 2) + '/>'
+                + '<hh:ratio ' + hwpxAxes(100) + '/>'
+                + '<hh:spacing ' + hwpxAxes(o.spacing || 0) + '/>'
+                + '<hh:relSz ' + hwpxAxes(o.relSz || 100) + '/>'
+                + '<hh:offset ' + hwpxAxes(o.offset || 0) + '/>'
+                + (o.bold ? '<hh:bold/>' : '')
+                + (o.italic ? '<hh:italic/>' : '')
+                + underline
+                + '<hh:strikeout shape="' + (o.strike ? 'SOLID' : 'NONE') + '" color="#000000"/>'
+                + '<hh:outline type="NONE"/>'
+                + '<hh:shadow type="NONE" color="#C0C0C0" offsetX="10" offsetY="10"/>'
+                + '</hh:charPr>';
+        }
+
+        /**
+         * 테두리/배경(borderFill) XML 생성 — 변: null(없음) 또는 {width, color}
+         */
+        function hwpxBorderFillXml(id, o) {
+            const side = (tag, s) => '<hh:' + tag + ' type="' + (s ? 'SOLID' : 'NONE') + '"'
+                + ' width="' + (s ? s.width : '0.1 mm') + '" color="' + (s ? s.color : '#000000') + '"/>';
+            return '<hh:borderFill id="' + id + '" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">'
+                + '<hh:slash type="NONE" Crooked="0" isCounter="0"/>'
+                + '<hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
+                + side('leftBorder', o.left) + side('rightBorder', o.right)
+                + side('topBorder', o.top) + side('bottomBorder', o.bottom)
+                + '<hh:diagonal type="NONE" width="0.1 mm" color="#000000"/>'
+                + (o.fill ? '<hc:fillBrush><hc:winBrush faceColor="' + o.fill + '" hatchColor="#000000" alpha="0"/></hc:fillBrush>' : '')
+                + '</hh:borderFill>';
+        }
+
+        /**
+         * 스타일 레지스트리 — 필요한 paraPr/charPr/borderFill을 캐시하며 등록
+         * (id 0~19 문단·0~6 글자·1~2 테두리는 한/글 기본 템플릿 몫으로 예약)
+         */
+        function hwpxCreateStyles() {
+            const custom = { paraPr: [], charPr: [], borderFill: [] };
+            const cache = { paraPr: new Map(), charPr: new Map(), borderFill: new Map() };
+            const register = (kind, base, builder, opts) => {
+                const key = JSON.stringify(opts);
+                if (cache[kind].has(key)) return cache[kind].get(key);
+                const id = base + custom[kind].length;
+                custom[kind].push(builder(id, opts));
+                cache[kind].set(key, id);
+                return id;
+            };
+            const styles = {
+                custom,
+                paraPr: opts => register('paraPr', 20, hwpxParaPrXml, opts),
+                charPr: opts => register('charPr', 7, hwpxCharPrXml, opts),
+                borderFill: opts => register('borderFill', 3, hwpxBorderFillXml, opts)
+            };
+            const hairline = { width: '0.12 mm', color: HWPX_COLORS.line };
+            styles.bfNone = styles.borderFill({});
+            styles.bfCover = styles.borderFill({ fill: HWPX_COLORS.cream });
+            styles.bfAccent = styles.borderFill({ fill: HWPX_COLORS.accent });
+            styles.bfBadge = styles.borderFill({ fill: HWPX_COLORS.accent, bottom: hairline });
+            styles.bfRule = styles.borderFill({ bottom: hairline });
+            styles.bfTableHead = styles.borderFill({
+                fill: HWPX_COLORS.accent,
+                left: { width: '0.1 mm', color: HWPX_COLORS.accent },
+                right: { width: '0.1 mm', color: HWPX_COLORS.accent },
+                top: { width: '0.1 mm', color: HWPX_COLORS.accent },
+                bottom: { width: '0.1 mm', color: HWPX_COLORS.accent }
+            });
+            styles.bfTableBody = styles.borderFill({ top: hairline, bottom: hairline });
+            styles.bfCode = styles.borderFill({ fill: HWPX_COLORS.codeBg });
+            styles.bfQuote = styles.borderFill({ left: { width: '0.4 mm', color: HWPX_COLORS.accent } });
+            return styles;
+        }
+
+        /**
+         * 서식 상태(fmt)를 charPr id로 변환
+         */
+        function hwpxCharIdFor(styles, fmt) {
+            const opts = {
+                size: fmt.size || (fmt.code ? HWPX_SZ.code : HWPX_SZ.body),
+                color: fmt.color || (fmt.link ? HWPX_COLORS.accent : HWPX_COLORS.body),
+                bold: !!fmt.bold,
+                italic: !!(fmt.italic || fmt.math),
+                underline: !!(fmt.underline || fmt.link),
+                strike: !!fmt.strike
+            };
+            if (fmt.code) opts.shadeBf = fmt.styles_bfCode;
+            if (fmt.sup) { opts.offset = 30; opts.relSz = 65; }
+            else if (fmt.sub) { opts.offset = -25; opts.relSz = 65; }
+            if (fmt.shadeBf) opts.shadeBf = fmt.shadeBf;
+            return styles.charPr(opts);
+        }
+
+        /**
+         * 텍스트 런 생성 (탭은 <hp:tab/>으로 변환)
+         */
+        function hwpxTextRun(text, charPrId) {
+            if (text === '') return '';
+            const parts = String(text).split('\t').map(seg =>
+                seg === '' ? '' : '<hp:t>' + hwpxEscape(seg) + '</hp:t>');
+            return '<hp:run charPrIDRef="' + charPrId + '">' + parts.join('<hp:tab/>') + '</hp:run>';
+        }
+
+        /**
+         * 문단 생성
+         */
+        function hwpxParagraph(state, ppId, runsXml) {
+            return '<hp:p id="' + (++state.paraId) + '" paraPrIDRef="' + ppId + '" styleIDRef="0"'
+                + ' pageBreak="0" columnBreak="0" merged="0">'
+                + (runsXml || '<hp:run charPrIDRef="1"><hp:t/></hp:run>')
+                + '</hp:p>';
+        }
+
+        /**
+         * 미리보기의 인라인 노드를 HWPX 런 목록으로 변환
+         */
+        function hwpxInlineToRuns(node, fmt, state, styles) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                if (node.textContent.trim() === '') {
+                    const isBlock = el => el && el.nodeType === Node.ELEMENT_NODE
+                        && /^(UL|OL|P|PRE|TABLE|BLOCKQUOTE|DIV|LI|H[1-6]|TR|TD|TH)$/.test(el.tagName);
+                    const prev = node.previousSibling;
+                    const next = node.nextSibling;
+                    if (!prev || !next || isBlock(prev) || isBlock(next)) return '';
+                    return hwpxTextRun(' ', hwpxCharIdFor(styles, fmt));
+                }
+                return hwpxTextRun(node.textContent.replace(/[ \t\r\n]+/g, ' '), hwpxCharIdFor(styles, fmt));
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+            const tag = node.tagName;
+            if (node.classList.contains('katex-display') || node.classList.contains('katex')) {
+                const katexRoot = node.classList.contains('katex') ? node : (node.querySelector('.katex') || node);
+                return hwpxTextRun(docxTexFromKatex(katexRoot),
+                    hwpxCharIdFor(styles, Object.assign({}, fmt, { math: true })));
+            }
+
+            switch (tag) {
+                case 'BR':
+                    return '<hp:run charPrIDRef="' + hwpxCharIdFor(styles, fmt) + '"><hp:lineBreak/></hp:run>';
+                case 'STRONG': case 'B':
+                    fmt = Object.assign({}, fmt, { bold: true }); break;
+                case 'EM': case 'I':
+                    fmt = Object.assign({}, fmt, { italic: true }); break;
+                case 'DEL': case 'S': case 'STRIKE':
+                    fmt = Object.assign({}, fmt, { strike: true }); break;
+                case 'U':
+                    fmt = Object.assign({}, fmt, { underline: true }); break;
+                case 'SUP':
+                    fmt = Object.assign({}, fmt, { sup: true }); break;
+                case 'SUB':
+                    fmt = Object.assign({}, fmt, { sub: true }); break;
+                case 'CODE':
+                    fmt = Object.assign({}, fmt, { code: true, shadeBf: styles.bfCode }); break;
+                case 'IMG':
+                    return hwpxPicRun(node, state, styles);
+                case 'A': {
+                    const href = node.getAttribute('href') || '';
+                    const linkFmt = Object.assign({}, fmt, { link: true });
+                    let inner = '';
+                    node.childNodes.forEach(child => { inner += hwpxInlineToRuns(child, linkFmt, state, styles); });
+                    if (inner === '') return '';
+                    // 인쇄물에서 주소가 보이도록 외부 링크는 "텍스트(URL)"로 평탄화
+                    if (/^(https?:|mailto:)/i.test(href) && node.textContent.trim() !== href.replace(/^mailto:/i, '')) {
+                        inner += hwpxTextRun('(' + href + ')',
+                            hwpxCharIdFor(styles, { size: HWPX_SZ.source, color: HWPX_COLORS.muted }));
+                    }
+                    return inner;
+                }
+            }
+
+            let runs = '';
+            node.childNodes.forEach(child => { runs += hwpxInlineToRuns(child, fmt, state, styles); });
+            return runs;
+        }
+
+        /**
+         * 미리 수집한 이미지를 인라인 그림(hp:pic) 런으로 변환
+         */
+        function hwpxPicRun(img, state, styles) {
+            const data = state.images.get(img);
+            if (!data) {
+                const alt = img.getAttribute('alt') || img.getAttribute('src') || '이미지';
+                return hwpxTextRun('[이미지: ' + alt + ']',
+                    hwpxCharIdFor(styles, { italic: true, color: HWPX_COLORS.muted }));
+            }
+            const id = ++state.objectId;
+            const w = data.w;
+            const h = data.h;
+            return '<hp:run charPrIDRef="1"><hp:pic textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" reverse="0"'
+                + ' id="' + id + '" zOrder="' + id % 1000 + '" numberingType="PICTURE" lock="0" dropcapstyle="None"'
+                + ' href="" groupLevel="0" instid="' + (id + 1) + '">'
+                + '<hp:offset x="0" y="0"/>'
+                + '<hp:orgSz width="' + w + '" height="' + h + '"/>'
+                + '<hp:curSz width="' + w + '" height="' + h + '"/>'
+                + '<hp:flip horizontal="0" vertical="0"/>'
+                + '<hp:rotationInfo angle="0" centerX="' + Math.round(w / 2) + '" centerY="' + Math.round(h / 2) + '" rotateimage="1"/>'
+                + '<hp:renderingInfo><hc:transMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/>'
+                + '<hc:scaMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/>'
+                + '<hc:rotMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/></hp:renderingInfo>'
+                + '<hp:imgRect><hc:pt0 x="0" y="0"/><hc:pt1 x="' + w + '" y="0"/>'
+                + '<hc:pt2 x="' + w + '" y="' + h + '"/><hc:pt3 x="0" y="' + h + '"/></hp:imgRect>'
+                + '<hp:imgClip left="0" right="' + w + '" top="0" bottom="' + h + '"/>'
+                + '<hp:inMargin left="0" right="0" top="0" bottom="0"/>'
+                + '<hp:imgDim dimwidth="' + w + '" dimheight="' + h + '"/>'
+                + '<hc:img binaryItemIDRef="' + data.itemId + '" bright="0" contrast="0" effect="REAL_PIC" alpha="0"/>'
+                + '<hp:effects/>'
+                + '<hp:sz width="' + w + '" height="' + h + '" widthRelTo="ABSOLUTE" heightRelTo="ABSOLUTE" protect="0"/>'
+                + '<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0"'
+                + ' vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>'
+                + '<hp:outMargin left="0" right="0" top="0" bottom="0"/>'
+                + '<hp:shapeComment/>'
+                + '</hp:pic></hp:run>';
+        }
+
+        /**
+         * 미리보기의 이미지를 PNG로 인코딩해 BinData로 수집
+         * (CORS로 캔버스가 오염된 경우 fetch 폴백, 실패 시 대체 텍스트 사용)
+         */
+        async function hwpxCollectImages(root, state) {
+            const imgs = root.querySelectorAll('img');
+            for (const img of imgs) {
+                if (!img.complete || !img.naturalWidth) continue;
+                let bytes = null;
+                let ext = 'png';
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    canvas.getContext('2d').drawImage(img, 0, 0);
+                    const base64 = canvas.toDataURL('image/png').split(',')[1];
+                    const binary = atob(base64);
+                    bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                } catch (canvasError) {
+                    try {
+                        const response = await fetch(img.src);
+                        const buffer = new Uint8Array(await response.arrayBuffer());
+                        if (buffer[0] === 0x89 && buffer[1] === 0x50) ext = 'png';
+                        else if (buffer[0] === 0xFF && buffer[1] === 0xD8) ext = 'jpg';
+                        else if (buffer[0] === 0x47 && buffer[1] === 0x49) ext = 'gif';
+                        else continue;
+                        bytes = buffer;
+                    } catch (fetchError) {
+                        continue;
+                    }
+                }
+                // px(96dpi) -> HWPUNIT(1/7200 inch): x75, 본문 폭·페이지 높이에 맞게 축소
+                let w = Math.round(img.naturalWidth * 75);
+                let h = Math.round(img.naturalHeight * 75);
+                if (w > HWPX_CONTENT_WIDTH) {
+                    h = Math.max(1, Math.round(h * HWPX_CONTENT_WIDTH / w));
+                    w = HWPX_CONTENT_WIDTH;
+                }
+                const maxH = 60000;
+                if (h > maxH) {
+                    w = Math.max(1, Math.round(w * maxH / h));
+                    h = maxH;
+                }
+                const itemId = 'BIN' + String(state.media.length + 1).padStart(4, '0');
+                state.media.push({ name: 'BinData/' + itemId + '.' + ext, data: bytes });
+                state.binItems.push({ id: itemId, href: 'BinData/' + itemId + '.' + ext, type: ext === 'jpg' ? 'image/jpeg' : 'image/' + ext });
+                state.images.set(img, { itemId, w: Math.max(1, w), h: Math.max(1, h) });
+            }
+        }
+
+        /**
+         * 표 셀(tc) XML 생성
+         */
+        function hwpxTableCell(state, styles, opts) {
+            return '<hp:tc name="" header="' + (opts.header ? 'true' : 'false') + '" hasMargin="0" protect="0"'
+                + ' editable="0" dirty="0" borderFillIDRef="' + opts.bf + '">'
+                + '<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
+                + ' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">'
+                + opts.paragraphs
+                + '</hp:subList>'
+                + '<hp:cellAddr colAddr="' + opts.col + '" rowAddr="' + opts.row + '"/>'
+                + '<hp:cellSpan colSpan="1" rowSpan="1"/>'
+                + '<hp:cellSz width="' + opts.width + '" height="' + opts.height + '"/>'
+                + '<hp:cellMargin left="' + opts.margin[0] + '" right="' + opts.margin[1] + '" top="' + opts.margin[2] + '" bottom="' + opts.margin[3] + '"/>'
+                + '</hp:tc>';
+        }
+
+        /**
+         * 표(tbl) XML 골격 생성
+         */
+        function hwpxTableShell(state, styles, opts) {
+            return '<hp:tbl id="' + (++state.objectId) + '" zOrder="' + state.objectId % 1000 + '" numberingType="TABLE"'
+                + ' textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL"'
+                + ' repeatHeader="' + (opts.repeatHeader ? 1 : 0) + '" rowCnt="' + opts.rowCnt + '" colCnt="' + opts.colCnt + '"'
+                + ' cellSpacing="0" borderFillIDRef="' + styles.bfNone + '" noAdjust="0">'
+                + '<hp:sz width="' + HWPX_CONTENT_WIDTH + '" widthRelTo="ABSOLUTE" height="' + opts.height + '" heightRelTo="ABSOLUTE" protect="0"/>'
+                + '<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0"'
+                + ' vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>'
+                + '<hp:outMargin left="0" right="0" top="' + opts.outTop + '" bottom="' + opts.outBottom + '"/>'
+                + '<hp:inMargin left="510" right="510" top="141" bottom="141"/>'
+                + opts.rows
+                + '</hp:tbl>';
+        }
+
+        /**
+         * 챕터 표지 블록 — 크림색 바탕 + 주황 번호 배지 + 청록 제목
+         * (# 제목이 "2. 제목" 형태면 번호를 배지로 사용)
+         */
+        function hwpxChapterCover(h1, state, styles) {
+            const text = h1.textContent.trim();
+            const numbered = /^(\d{1,3})[.)]?\s+(.+)$/.exec(text);
+            let chipNum;
+            let titleRuns;
+            if (numbered) {
+                chipNum = parseInt(numbered[1], 10);
+                state.chapterCounter = chipNum;
+                titleRuns = hwpxTextRun(numbered[2],
+                    hwpxCharIdFor(styles, { size: HWPX_SZ.chapter, color: HWPX_COLORS.title, bold: true }));
+            } else {
+                chipNum = ++state.chapterCounter;
+                titleRuns = hwpxInlineToRuns(h1,
+                    { size: HWPX_SZ.chapter, color: HWPX_COLORS.title, bold: true }, state, styles);
+            }
+            state.sectionCounter = 0;
+
+            const chipCp = hwpxCharIdFor(styles, {
+                size: HWPX_SZ.chip, color: HWPX_COLORS.white, bold: true, shadeBf: styles.bfAccent
+            });
+            const ppBadge = styles.paraPr({ align: 'CENTER', next: 1100, ls: 150 });
+            const ppTitle = styles.paraPr({ align: 'CENTER', ls: 150 });
+            // 배지 좌우 여백은 줄바꿈·공백 정리에 안전한 NBSP로 채운다
+            const inner = hwpxParagraph(state, ppBadge, hwpxTextRun('\u00A0 ' + chipNum + ' \u00A0', chipCp))
+                + hwpxParagraph(state, ppTitle, titleRuns);
+
+            const coverHeight = 36000;
+            const rows = '<hp:tr>' + hwpxTableCell(state, styles, {
+                header: false, bf: styles.bfCover, paragraphs: inner,
+                col: 0, row: 0, width: HWPX_CONTENT_WIDTH, height: coverHeight,
+                margin: [2000, 2000, 6500, 6500]
+            }) + '</hp:tr>';
+            const tbl = hwpxTableShell(state, styles, {
+                rowCnt: 1, colCnt: 1, height: coverHeight, outTop: 0, outBottom: 1500, rows
+            });
+
+            const ppWrap = styles.paraPr({
+                align: 'CENTER', ls: 100, pageBreakBefore: state.coverEmitted
+            });
+            state.coverEmitted = true;
+            return hwpxParagraph(state, ppWrap, '<hp:run charPrIDRef="1">' + tbl + '</hp:run>');
+        }
+
+        /**
+         * 섹션 제목 배너 — 주황 배지(가/나/다) + 남색 제목 + 연회색 밑줄
+         * (## 제목이 "가. 제목" 형태면 그 배지를 그대로 사용)
+         */
+        function hwpxSectionBanner(h2, state, styles) {
+            const labels = '가나다라마바사아자차카타파하';
+            let text = h2.textContent.trim();
+            let label = null;
+            const explicit = /^\(?([가-힣])[.)]\s+(.+)$/.exec(text);
+            if (explicit && labels.indexOf(explicit[1]) >= 0) {
+                label = explicit[1];
+                text = explicit[2];
+                state.sectionCounter = labels.indexOf(label) + 1;
+            } else {
+                label = labels[state.sectionCounter % labels.length];
+                state.sectionCounter++;
+            }
+            const titleRuns = explicit
+                ? hwpxTextRun(text, hwpxCharIdFor(styles, { size: HWPX_SZ.section, color: HWPX_COLORS.heading, bold: true }))
+                : hwpxInlineToRuns(h2, { size: HWPX_SZ.section, color: HWPX_COLORS.heading, bold: true }, state, styles);
+
+            const badgeCp = hwpxCharIdFor(styles, {
+                size: HWPX_SZ.badge, color: HWPX_COLORS.white, bold: true
+            });
+            const ppCell = styles.paraPr({ align: 'CENTER', ls: 130 });
+            const ppTitleCell = styles.paraPr({ align: 'LEFT', ls: 130 });
+            const badgeWidth = 2400;
+            const rowHeight = 2300;
+            const rows = '<hp:tr>'
+                + hwpxTableCell(state, styles, {
+                    header: false, bf: styles.bfBadge,
+                    paragraphs: hwpxParagraph(state, ppCell, hwpxTextRun(label, badgeCp)),
+                    col: 0, row: 0, width: badgeWidth, height: rowHeight, margin: [80, 80, 120, 200]
+                })
+                + hwpxTableCell(state, styles, {
+                    header: false, bf: styles.bfRule,
+                    paragraphs: hwpxParagraph(state, ppTitleCell, titleRuns),
+                    col: 1, row: 0, width: HWPX_CONTENT_WIDTH - badgeWidth, height: rowHeight, margin: [400, 100, 120, 200]
+                })
+                + '</hp:tr>';
+            const tbl = hwpxTableShell(state, styles, {
+                rowCnt: 1, colCnt: 2, height: rowHeight, outTop: 900, outBottom: 500, rows
+            });
+            const ppWrap = styles.paraPr({ align: 'LEFT', ls: 100, keepWithNext: true });
+            return hwpxParagraph(state, ppWrap, '<hp:run charPrIDRef="1">' + tbl + '</hp:run>');
+        }
+
+        /**
+         * 표를 발간물 서식(주황 머리행 + 가로 연회색 줄)으로 변환
+         */
+        function hwpxTableToXml(table, state, styles) {
+            const rows = Array.from(table.rows);
+            if (rows.length === 0) return '';
+            const colCount = Math.max(...rows.map(row => row.cells.length));
+            if (colCount === 0) return '';
+
+            // 미리보기에 렌더링된 실제 열 폭 비율 사용 (측정 불가 시 균등 분할)
+            let measured = Array.from(rows[0].cells).map(cell => cell.getBoundingClientRect().width);
+            while (measured.length < colCount) measured.push(0);
+            const totalMeasured = measured.reduce((sum, w) => sum + w, 0);
+            let widths;
+            if (totalMeasured > 0) {
+                widths = measured.map(w => Math.max(1200, Math.round(w / totalMeasured * HWPX_CONTENT_WIDTH)));
+            } else {
+                widths = new Array(colCount).fill(Math.floor(HWPX_CONTENT_WIDTH / colCount));
+            }
+            const widthSum = widths.reduce((sum, w) => sum + w, 0);
+            widths[widths.length - 1] += HWPX_CONTENT_WIDTH - widthSum;
+
+            // 열 정렬: align 속성 우선, 없으면 짧은 내용 열은 가운데
+            const bodyRows = rows.filter(row => Array.from(row.cells).some(cell => cell.tagName === 'TD'));
+            const centered = [];
+            for (let c = 0; c < colCount; c++) {
+                const vals = bodyRows.map(row => row.cells[c] ? row.cells[c].textContent.trim() : '')
+                    .filter(v => v !== '');
+                centered.push(vals.length === 0 || vals.every(v => v.length <= 14));
+            }
+
+            const rowHeight = 1500;
+            const ppCellCenter = styles.paraPr({ align: 'CENTER', ls: 150 });
+            const ppCellLeft = styles.paraPr({ align: 'LEFT', ls: 150 });
+            const ppCellRight = styles.paraPr({ align: 'RIGHT', ls: 150 });
+            let rowsXml = '';
+            rows.forEach((row, r) => {
+                const cells = Array.from(row.cells);
+                const isHeader = cells.length > 0 && cells.every(cell => cell.tagName === 'TH');
+                rowsXml += '<hp:tr>';
+                for (let c = 0; c < colCount; c++) {
+                    const cell = cells[c];
+                    let paragraphs;
+                    if (cell) {
+                        const align = (cell.getAttribute('align') || '').toLowerCase();
+                        const pp = isHeader ? ppCellCenter
+                            : align === 'center' ? ppCellCenter
+                            : align === 'right' ? ppCellRight
+                            : (centered[c] ? ppCellCenter : ppCellLeft);
+                        const fmt = isHeader
+                            ? { size: HWPX_SZ.tableHead, color: HWPX_COLORS.white, bold: true }
+                            : { size: HWPX_SZ.table, color: HWPX_COLORS.body };
+                        let runs = '';
+                        cell.childNodes.forEach(child => { runs += hwpxInlineToRuns(child, fmt, state, styles); });
+                        paragraphs = hwpxParagraph(state, pp, runs);
+                    } else {
+                        paragraphs = hwpxParagraph(state, ppCellCenter, '');
+                    }
+                    rowsXml += hwpxTableCell(state, styles, {
+                        header: isHeader, bf: isHeader ? styles.bfTableHead : styles.bfTableBody,
+                        paragraphs, col: c, row: r, width: widths[c], height: rowHeight,
+                        margin: [300, 300, 160, 160]
+                    });
+                }
+                rowsXml += '</hp:tr>';
+            });
+            const tbl = hwpxTableShell(state, styles, {
+                repeatHeader: true, rowCnt: rows.length, colCnt: colCount,
+                height: rowHeight * rows.length, outTop: 350, outBottom: 350, rows: rowsXml
+            });
+            const ppWrap = styles.paraPr({ align: 'CENTER', ls: 100 });
+            return hwpxParagraph(state, ppWrap, '<hp:run charPrIDRef="1">' + tbl + '</hp:run>');
+        }
+
+        /**
+         * 목록(ul/ol)을 미리보기와 같은 계층(□→○→●, 1→1.1→1.1.1)으로 변환
+         */
+        function hwpxListToXml(list, level, state, styles, ctx, olPath) {
+            const ordered = list.tagName === 'OL';
+            const bullets = ['□', '○', '●'];
+            let index = ordered ? (parseInt(list.getAttribute('start') || '1', 10) || 1) : 0;
+            let xml = '';
+            Array.from(list.children).forEach(li => {
+                if (li.tagName !== 'LI') return;
+                const marker = ordered
+                    ? olPath.concat(index).join('.') + '.'
+                    : bullets[Math.min(level, bullets.length - 1)];
+                const hang = ordered ? 500 + 240 * marker.length : 600;
+                const indent = 600 * level;
+                const ppItem = styles.paraPr({
+                    align: 'JUSTIFY', left: indent + hang, intent: -hang, next: 150, ls: 170
+                });
+                const ppCont = styles.paraPr({
+                    align: 'JUSTIFY', left: indent + hang, next: 150, ls: 170
+                });
+                let firstParagraphDone = false;
+                let inlineBuffer = '';
+                const flushInline = () => {
+                    if (inlineBuffer.trim() === '' && firstParagraphDone) { inlineBuffer = ''; return; }
+                    if (!firstParagraphDone) {
+                        const markerRun = hwpxTextRun(marker + ' ',
+                            hwpxCharIdFor(styles, { size: HWPX_SZ.body, color: HWPX_COLORS.body }));
+                        xml += hwpxParagraph(state, ppItem, markerRun + inlineBuffer);
+                    } else {
+                        xml += hwpxParagraph(state, ppCont, inlineBuffer);
+                    }
+                    inlineBuffer = '';
+                    firstParagraphDone = true;
+                };
+                li.childNodes.forEach(child => {
+                    const childTag = child.nodeType === Node.ELEMENT_NODE ? child.tagName : null;
+                    if (childTag === 'UL' || childTag === 'OL') {
+                        flushInline();
+                        xml += hwpxListToXml(child, level + 1, state, styles, ctx,
+                            childTag === 'OL' ? (ordered ? olPath.concat(index) : olPath) : olPath);
+                    } else if (childTag === 'P') {
+                        child.childNodes.forEach(grandchild => {
+                            inlineBuffer += hwpxInlineToRuns(grandchild, {}, state, styles);
+                        });
+                        flushInline();
+                    } else if (childTag === 'PRE') {
+                        flushInline();
+                        xml += hwpxPreToXml(child, state, styles, { indent: indent + hang });
+                    } else if (childTag === 'TABLE') {
+                        flushInline();
+                        xml += hwpxTableToXml(child, state, styles);
+                    } else if (childTag === 'BLOCKQUOTE') {
+                        flushInline();
+                        xml += hwpxBlocksToXml(child, state, styles,
+                            Object.assign({}, ctx, { quoteDepth: (ctx.quoteDepth || 0) + 1 }));
+                    } else {
+                        inlineBuffer += hwpxInlineToRuns(child, {}, state, styles);
+                    }
+                });
+                if (!firstParagraphDone || inlineBuffer.trim() !== '') flushInline();
+                if (ordered) index++;
+            });
+            return xml;
+        }
+
+        /**
+         * 코드 블록(pre)을 연회색 배경 문단들로 변환
+         */
+        function hwpxPreToXml(pre, state, styles, opts) {
+            const cp = hwpxCharIdFor(styles, { size: HWPX_SZ.code, color: '#333333' });
+            const pp = styles.paraPr({
+                align: 'LEFT', left: (opts && opts.indent) || 0, ls: 140,
+                borderBf: styles.bfCode, borderOff: [200, 200, 80, 80], connect: true
+            });
+            const lines = pre.textContent.replace(/\n$/, '').split('\n');
+            return lines.map(line => hwpxParagraph(state, pp, hwpxTextRun(line || ' ', cp))).join('');
+        }
+
+        /**
+         * 미리보기 블록 요소들을 HWPX 본문으로 변환
+         */
+        function hwpxBlocksToXml(parent, state, styles, ctx) {
+            ctx = ctx || {};
+            let xml = '';
+            Array.from(parent.childNodes).forEach(node => {
+                if (node.nodeType !== Node.ELEMENT_NODE) return;
+                const tag = node.tagName;
+
+                if (tag === 'H1') { xml += hwpxChapterCover(node, state, styles); return; }
+                if (tag === 'H2') { xml += hwpxSectionBanner(node, state, styles); return; }
+                if (/^H[3-6]$/.test(tag)) {
+                    const size = tag === 'H3' ? HWPX_SZ.h3 : HWPX_SZ.h4;
+                    const pp = styles.paraPr({ align: 'LEFT', prev: 450, next: 150, ls: 150, keepWithNext: true });
+                    const runs = hwpxInlineToRuns(node,
+                        { size, color: HWPX_COLORS.heading, bold: true }, state, styles);
+                    xml += hwpxParagraph(state, pp, runs);
+                    return;
+                }
+
+                switch (tag) {
+                    case 'P': {
+                        const text = node.textContent.trim();
+                        if (text === '' && node.querySelector('img')) {
+                            // 이미지 단독 문단: 가운데 정렬
+                            const ppImg = styles.paraPr({ align: 'CENTER', prev: 300, next: 300, ls: 100 });
+                            node.querySelectorAll('img').forEach(img => {
+                                xml += hwpxParagraph(state, ppImg, hwpxPicRun(img, state, styles));
+                            });
+                            break;
+                        }
+                        let baseFmt = {};
+                        let pp;
+                        if (/^[<〈]\s*(그림|표)/.test(text)) {
+                            // <그림 N>/<표 N> 캡션: 가운데 남색 굵게
+                            baseFmt = { size: HWPX_SZ.caption, color: HWPX_COLORS.heading, bold: true };
+                            pp = styles.paraPr({ align: 'CENTER', prev: 250, next: 120, ls: 150, keepWithNext: true });
+                        } else if (/^(출처|자료)\s*[:：]/.test(text)) {
+                            // 출처 표기: 가운데 회색 작은 글씨
+                            baseFmt = { size: HWPX_SZ.source, color: HWPX_COLORS.muted };
+                            pp = styles.paraPr({ align: 'CENTER', next: 600, ls: 150 });
+                        } else if (ctx.quoteDepth > 0) {
+                            baseFmt = { color: '#595959' };
+                            pp = styles.paraPr({
+                                align: 'JUSTIFY', left: 700 * ctx.quoteDepth, next: 200, ls: 170,
+                                borderBf: styles.bfQuote, borderOff: [300, 0, 60, 60], connect: true
+                            });
+                        } else if (node.querySelector('.katex-display')) {
+                            pp = styles.paraPr({ align: 'CENTER', prev: 200, next: 300, ls: 160 });
+                        } else {
+                            pp = styles.paraPr({ align: 'JUSTIFY', next: 350, ls: 180 });
+                        }
+                        let runs = '';
+                        node.childNodes.forEach(child => { runs += hwpxInlineToRuns(child, baseFmt, state, styles); });
+                        xml += hwpxParagraph(state, pp, runs);
+                        break;
+                    }
+                    case 'UL': case 'OL':
+                        xml += hwpxListToXml(node, 0, state, styles, ctx, []);
+                        break;
+                    case 'BLOCKQUOTE':
+                        xml += hwpxBlocksToXml(node, state, styles,
+                            Object.assign({}, ctx, { quoteDepth: (ctx.quoteDepth || 0) + 1 }));
+                        break;
+                    case 'PRE':
+                        xml += hwpxPreToXml(node, state, styles, {});
+                        break;
+                    case 'TABLE':
+                        xml += hwpxTableToXml(node, state, styles);
+                        break;
+                    case 'HR': {
+                        const pp = styles.paraPr({
+                            align: 'CENTER', prev: 250, next: 250, ls: 100,
+                            borderBf: styles.bfRule, borderOff: [0, 0, 0, 100]
+                        });
+                        xml += hwpxParagraph(state, pp, '');
+                        break;
+                    }
+                    default:
+                        if (node.querySelector && node.querySelector('p, ul, ol, table, pre, blockquote, h1, h2, h3, h4, h5, h6')) {
+                            xml += hwpxBlocksToXml(node, state, styles, ctx);
+                        } else {
+                            let runs = '';
+                            node.childNodes.forEach(child => { runs += hwpxInlineToRuns(child, {}, state, styles); });
+                            if (node.classList && node.classList.contains('katex')) {
+                                runs = hwpxInlineToRuns(node, {}, state, styles);
+                            }
+                            if (runs !== '') {
+                                const isMathBlock = node.classList
+                                    && (node.classList.contains('katex-display') || !!node.querySelector('.katex-display'));
+                                const pp = styles.paraPr(isMathBlock
+                                    ? { align: 'CENTER', prev: 200, next: 300, ls: 160 }
+                                    : { align: 'JUSTIFY', next: 350, ls: 180 });
+                                xml += hwpxParagraph(state, pp, runs);
+                            }
+                        }
+                }
+            });
+            return xml;
+        }
+
+        /**
+         * 헤더(header.xml) 생성 — 한/글 기본 템플릿 서식 + 발간물 사용자 서식
+         */
+        function hwpxHeaderXml(styles) {
+            // 글꼴 목록 (7개 언어축 × 3개 글꼴, id 2 = 맑은 고딕)
+            const typeInfo = '<hh:typeInfo familyType="FCAT_GOTHIC" weight="6" proportion="4" contrast="0"'
+                + ' strokeVariation="1" armStyle="1" letterform="1" midline="1" xHeight="1"/>';
+            const fontfaces = '<hh:fontfaces itemCnt="7">'
+                + ['HANGUL', 'LATIN', 'HANJA', 'JAPANESE', 'OTHER', 'SYMBOL', 'USER'].map(lang =>
+                    '<hh:fontface lang="' + lang + '" fontCnt="' + HWPX_FONTS.length + '">'
+                    + HWPX_FONTS.map((face, id) =>
+                        '<hh:font id="' + id + '" face="' + face + '" type="TTF" isEmbedded="0">' + typeInfo + '</hh:font>'
+                    ).join('')
+                    + '</hh:fontface>'
+                ).join('')
+                + '</hh:fontfaces>';
+
+            // 기본 테두리 2종 (한/글 템플릿과 동일: 1=없음, 2=없음+투명 배경)
+            const noneSides = ['leftBorder', 'rightBorder', 'topBorder', 'bottomBorder']
+                .map(tag => '<hh:' + tag + ' type="NONE" width="0.1 mm" color="#000000"/>').join('');
+            const baseBorderFills = '<hh:borderFill id="1" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">'
+                + '<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
+                + noneSides + '<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/></hh:borderFill>'
+                + '<hh:borderFill id="2" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">'
+                + '<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
+                + noneSides + '<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>'
+                + '<hc:fillBrush><hc:winBrush faceColor="none" hatchColor="#999999" alpha="0"/></hc:fillBrush></hh:borderFill>';
+            const borderFills = '<hh:borderFills itemCnt="' + (2 + styles.custom.borderFill.length) + '">'
+                + baseBorderFills + styles.custom.borderFill.join('') + '</hh:borderFills>';
+
+            // 기본 글자 모양 7종 (한/글 템플릿과 동일) + 사용자 글자 모양
+            const baseCharPrs = [
+                { size: 1000, font: 1 }, { size: 1000, font: 0 }, { size: 900, font: 0 },
+                { size: 900, font: 1 }, { size: 900, font: 0, spacing: -5 },
+                { size: 1600, font: 0, color: '#2E74B5' }, { size: 1100, font: 0 }
+            ].map((o, id) => hwpxCharPrXml(id, o)).join('');
+            const charProperties = '<hh:charProperties itemCnt="' + (7 + styles.custom.charPr.length) + '">'
+                + baseCharPrs + styles.custom.charPr.join('') + '</hh:charProperties>';
+
+            const tabProperties = '<hh:tabProperties itemCnt="3">'
+                + '<hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/>'
+                + '<hh:tabPr id="1" autoTabLeft="1" autoTabRight="0"/>'
+                + '<hh:tabPr id="2" autoTabLeft="0" autoTabRight="1"/></hh:tabProperties>';
+
+            const numberings = '<hh:numberings itemCnt="1"><hh:numbering id="1" start="0">'
+                + [['DIGIT', '^1.'], ['HANGUL_SYLLABLE', '^2.'], ['DIGIT', '^3)'], ['HANGUL_SYLLABLE', '^4)'],
+                   ['DIGIT', '(^5)'], ['HANGUL_SYLLABLE', '(^6)'], ['CIRCLED_DIGIT', '^7'],
+                   ['CIRCLED_HANGUL_SYLLABLE', '^8'], ['HANGUL_JAMO', ''], ['ROMAN_SMALL', '']]
+                    .map((spec, i) => '<hh:paraHead start="1" level="' + (i + 1) + '" align="LEFT" useInstWidth="1"'
+                        + ' autoIndent="1" widthAdjust="0" textOffsetType="PERCENT" textOffset="50"'
+                        + ' numFormat="' + spec[0] + '" charPrIDRef="4294967295" checkable="' + (i === 6 || i === 7 || i === 9 ? 1 : 0) + '">'
+                        + spec[1] + '</hh:paraHead>').join('')
+                + '</hh:numbering></hh:numberings>';
+
+            // 기본 문단 모양 20종 (한/글 템플릿과 동일한 표) + 사용자 문단 모양
+            const J = 'JUSTIFY', L = 'LEFT', K = 'KEEP_WORD', B = 'BREAK_WORD';
+            const basePP = [
+                { align: J, breakNL: B },
+                { align: J, breakNL: K, left: 1500 },
+                { align: J, breakNL: K, tab: 1, condense: 20, headingLevel: 0, left: 1000 },
+                { align: J, breakNL: K, tab: 1, condense: 20, headingLevel: 1, left: 2000 },
+                { align: J, breakNL: K, tab: 1, condense: 20, headingLevel: 2, left: 3000 },
+                { align: J, breakNL: K, tab: 1, condense: 20, headingLevel: 3, left: 4000 },
+                { align: J, breakNL: K, tab: 1, condense: 20, headingLevel: 4, left: 5000 },
+                { align: J, breakNL: K, tab: 1, condense: 20, headingLevel: 5, left: 6000 },
+                { align: J, breakNL: K, tab: 1, condense: 20, headingLevel: 6, left: 7000 },
+                { align: J, breakNL: B, ls: 150 },
+                { align: J, breakNL: B, intent: -1310, ls: 130 },
+                { align: L, breakNL: B, ls: 130 },
+                { align: L, breakNL: B, tab: 1, condense: 20, prev: 1200, next: 300 },
+                { align: L, breakNL: B, tab: 2, next: 700 },
+                { align: L, breakNL: B, tab: 2, left: 1100, next: 700 },
+                { align: L, breakNL: B, tab: 2, left: 2200, next: 700 },
+                { align: J, breakNL: K, tab: 1, headingSwitch: 8, left: 9000 },
+                { align: J, breakNL: K, tab: 1, headingSwitch: 9, left: 10000 },
+                { align: J, breakNL: K, tab: 1, headingSwitch: 7, left: 8000 },
+                { align: J, breakNL: K, next: 800, ls: 150 }
+            ].map((o, id) => hwpxParaPrXml(id, Object.assign({ legacyDouble: true }, o))).join('');
+            const paraProperties = '<hh:paraProperties itemCnt="' + (20 + styles.custom.paraPr.length) + '">'
+                + basePP + styles.custom.paraPr.join('') + '</hh:paraProperties>';
+
+            const styleDefs = [
+                ['0', 'PARA', '바탕글', 'Normal', 0, 0], ['1', 'PARA', '본문', 'Body', 1, 0],
+                ['2', 'PARA', '개요 1', 'Outline 1', 2, 0], ['3', 'PARA', '개요 2', 'Outline 2', 3, 0],
+                ['4', 'PARA', '개요 3', 'Outline 3', 4, 0], ['5', 'PARA', '개요 4', 'Outline 4', 5, 0],
+                ['6', 'PARA', '개요 5', 'Outline 5', 6, 0], ['7', 'PARA', '개요 6', 'Outline 6', 7, 0],
+                ['8', 'PARA', '개요 7', 'Outline 7', 8, 0], ['9', 'PARA', '개요 8', 'Outline 8', 18, 0],
+                ['10', 'PARA', '개요 9', 'Outline 9', 16, 0], ['11', 'PARA', '개요 10', 'Outline 10', 17, 0],
+                ['12', 'CHAR', '쪽 번호', 'Page Number', 0, 1], ['13', 'CHAR', '줄 번호', 'Line Number', 0, 0],
+                ['14', 'PARA', '머리말', 'Header', 9, 2], ['15', 'PARA', '각주', 'Footnote', 10, 3],
+                ['16', 'PARA', '미주', 'Endnote', 10, 3], ['17', 'PARA', '메모', 'Memo', 11, 4],
+                ['18', 'PARA', '차례 제목', 'TOC Heading', 12, 5], ['19', 'PARA', '차례 1', 'TOC 1', 13, 6],
+                ['20', 'PARA', '차례 2', 'TOC 2', 14, 6], ['21', 'PARA', '차례 3', 'TOC 3', 15, 6],
+                ['22', 'PARA', '캡션', 'Caption', 19, 0]
+            ];
+            const stylesXml = '<hh:styles itemCnt="' + styleDefs.length + '">'
+                + styleDefs.map(def => '<hh:style id="' + def[0] + '" type="' + def[1] + '" name="' + def[2] + '"'
+                    + ' engName="' + def[3] + '" paraPrIDRef="' + def[4] + '" charPrIDRef="' + def[5] + '"'
+                    + ' nextStyleIDRef="' + (def[1] === 'PARA' ? def[0] : 0) + '" langID="1042" lockForm="0"/>').join('')
+                + '</hh:styles>';
+
+            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<hh:head ' + HWPX_NS + ' version="1.5" secCnt="1">'
+                + '<hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/>'
+                + '<hh:refList>' + fontfaces + borderFills + charProperties + tabProperties
+                + numberings + paraProperties + stylesXml + '</hh:refList>'
+                + '<hh:compatibleDocument targetProgram="HWP201X"><hh:layoutCompatibility/></hh:compatibleDocument>'
+                + '<hh:docOption><hh:linkinfo path="" pageInherit="0" footnoteInherit="0"/></hh:docOption>'
+                + '<hh:metaTag>{"name":""}</hh:metaTag>'
+                + '<hh:trackchageConfig flags="56"/>'
+                + '</hh:head>';
+        }
+
+        /**
+         * 본문(section0.xml) 생성 — 편집용지·주황 쪽번호 바닥글 포함
+         */
+        function hwpxSectionXml(styles, state, bodyXml) {
+            const footerCp = hwpxCharIdFor(styles, { size: HWPX_SZ.footer, color: HWPX_COLORS.accent });
+            const footerPp = styles.paraPr({ align: 'CENTER', ls: 150 });
+            const footerId = 1861001001;
+            const footer = '<hp:footer id="' + footerId + '" applyPageType="BOTH">'
+                + '<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="BOTTOM"'
+                + ' linkListIDRef="0" linkListNextIDRef="0" textWidth="' + HWPX_CONTENT_WIDTH + '"'
+                + ' textHeight="' + HWPX_PAGE.footer + '" hasTextRef="0" hasNumRef="0">'
+                + '<hp:p paraPrIDRef="' + footerPp + '" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0" id="' + (++state.paraId) + '">'
+                + '<hp:run charPrIDRef="' + footerCp + '"><hp:ctrl><hp:autoNum num="1" numType="PAGE"/></hp:ctrl></hp:run>'
+                + '</hp:p></hp:subList></hp:footer>';
+
+            const secPr = '<hp:secPr id="" textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000"'
+                + ' tabStopVal="4000" tabStopUnit="HWPUNIT" outlineShapeIDRef="1" memoShapeIDRef="0"'
+                + ' textVerticalWidthHead="0" masterPageCnt="0">'
+                + '<hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/>'
+                + '<hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>'
+                + '<hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" border="SHOW_ALL"'
+                + ' fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" showLineNumber="0"/>'
+                + '<hp:lineNumberShape restartType="0" countBy="0" distance="0" startNumber="0"/>'
+                + '<hp:pagePr landscape="WIDELY" width="' + HWPX_PAGE.width + '" height="' + HWPX_PAGE.height + '" gutterType="LEFT_ONLY">'
+                + '<hp:margin header="' + HWPX_PAGE.header + '" footer="' + HWPX_PAGE.footer + '" gutter="0"'
+                + ' left="' + HWPX_PAGE.left + '" right="' + HWPX_PAGE.right + '" top="' + HWPX_PAGE.top + '" bottom="' + HWPX_PAGE.bottom + '"/>'
+                + '</hp:pagePr>'
+                + '<hp:footNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>'
+                + '<hp:noteLine length="-1" type="SOLID" width="0.12 mm" color="#000000"/>'
+                + '<hp:noteSpacing betweenNotes="283" belowLine="567" aboveLine="850"/>'
+                + '<hp:numbering type="CONTINUOUS" newNum="1"/>'
+                + '<hp:placement place="EACH_COLUMN" beneathText="0"/></hp:footNotePr>'
+                + '<hp:endNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>'
+                + '<hp:noteLine length="14692344" type="SOLID" width="0.12 mm" color="#000000"/>'
+                + '<hp:noteSpacing betweenNotes="0" belowLine="567" aboveLine="850"/>'
+                + '<hp:numbering type="CONTINUOUS" newNum="1"/>'
+                + '<hp:placement place="END_OF_DOCUMENT" beneathText="0"/></hp:endNotePr>'
+                + ['BOTH', 'EVEN', 'ODD'].map(type =>
+                    '<hp:pageBorderFill type="' + type + '" borderFillIDRef="1" textBorder="PAPER" headerInside="0"'
+                    + ' footerInside="0" fillArea="PAPER"><hp:offset left="1417" right="1417" top="1417" bottom="1417"/></hp:pageBorderFill>'
+                ).join('')
+                + footer
+                + '<hp:footerApply applyPageType="BOTH" idRef="' + footerId + '"/>'
+                + '</hp:secPr>';
+
+            const firstPara = '<hp:p id="0" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                + '<hp:run charPrIDRef="0">' + secPr
+                + '<hp:ctrl><hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/></hp:ctrl>'
+                + '<hp:ctrl>' + footer + '</hp:ctrl>'
+                + '</hp:run>'
+                + '<hp:run charPrIDRef="0"><hp:t/></hp:run>'
+                + '<hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000"'
+                + ' baseline="850" spacing="600" horzpos="0" horzsize="' + HWPX_CONTENT_WIDTH + '" flags="393216"/></hp:linesegarray>'
+                + '</hp:p>';
+
+            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<hs:sec ' + HWPX_NS + '>' + firstPara + bodyXml + '</hs:sec>';
+        }
+
+        /**
+         * 미리보기 DOM 전체를 .hwpx 패키지 바이트로 변환
+         */
+        async function buildHwpxFromPreview(root, docTitle) {
+            const state = {
+                media: [],
+                binItems: [],
+                images: new Map(),
+                paraId: 1000,
+                objectId: 1697000000,
+                chapterCounter: 0,
+                sectionCounter: 0,
+                coverEmitted: false
+            };
+            const styles = hwpxCreateStyles();
+            await hwpxCollectImages(root, state);
+            const bodyXml = hwpxBlocksToXml(root, state, styles, {})
+                || hwpxParagraph(state, styles.paraPr({ align: 'JUSTIFY', next: 350, ls: 180 }), '');
+            const sectionXml = hwpxSectionXml(styles, state, bodyXml);
+            const headerXml = hwpxHeaderXml(styles);
+
+            const versionXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<hv:HCFVersion xmlns:hv="http://www.hancom.co.kr/hwpml/2011/version" tagetApplication="WORDPROCESSOR"'
+                + ' major="5" minor="1" micro="1" buildNumber="0" os="1" xmlVersion="1.5"'
+                + ' application="Hancom Office Hangul" appVersion="13, 0, 0, 1408 WIN32LEWindows_10"/>';
+
+            const containerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<ocf:container xmlns:ocf="urn:oasis:names:tc:opendocument:xmlns:container"'
+                + ' xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf"><ocf:rootfiles>'
+                + '<ocf:rootfile full-path="Contents/content.hpf" media-type="application/hwpml-package+xml"/>'
+                + '<ocf:rootfile full-path="Preview/PrvText.txt" media-type="text/plain"/>'
+                + '<ocf:rootfile full-path="META-INF/container.rdf" media-type="application/rdf+xml"/>'
+                + '</ocf:rootfiles></ocf:container>';
+
+            const manifestXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<odf:manifest xmlns:odf="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"/>';
+
+            const containerRdf = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+                + '<rdf:Description rdf:about="">'
+                + '<ns0:hasPart xmlns:ns0="http://www.hancom.co.kr/hwpml/2016/meta/pkg#" rdf:resource="Contents/header.xml"/>'
+                + '</rdf:Description>'
+                + '<rdf:Description rdf:about="Contents/header.xml">'
+                + '<rdf:type rdf:resource="http://www.hancom.co.kr/hwpml/2016/meta/pkg#HeaderFile"/>'
+                + '</rdf:Description>'
+                + '<rdf:Description rdf:about="">'
+                + '<ns0:hasPart xmlns:ns0="http://www.hancom.co.kr/hwpml/2016/meta/pkg#" rdf:resource="Contents/section0.xml"/>'
+                + '</rdf:Description>'
+                + '<rdf:Description rdf:about="Contents/section0.xml">'
+                + '<rdf:type rdf:resource="http://www.hancom.co.kr/hwpml/2016/meta/pkg#SectionFile"/>'
+                + '</rdf:Description>'
+                + '<rdf:Description rdf:about="">'
+                + '<rdf:type rdf:resource="http://www.hancom.co.kr/hwpml/2016/meta/pkg#Document"/>'
+                + '</rdf:Description></rdf:RDF>';
+
+            const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+            const contentHpf = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<opf:package ' + HWPX_NS + ' version="" unique-identifier="" id="">'
+                + '<opf:metadata><opf:title>' + hwpxEscape(docTitle) + '</opf:title><opf:language>ko</opf:language>'
+                + '<opf:meta name="creator" content="text">JJANG MD Editor</opf:meta>'
+                + '<opf:meta name="CreatedDate" content="text">' + timestamp + '</opf:meta>'
+                + '<opf:meta name="ModifiedDate" content="text">' + timestamp + '</opf:meta>'
+                + '</opf:metadata><opf:manifest>'
+                + '<opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>'
+                + '<opf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/>'
+                + '<opf:item id="settings" href="settings.xml" media-type="application/xml"/>'
+                + state.binItems.map(item =>
+                    '<opf:item id="' + item.id + '" href="' + item.href + '" media-type="' + item.type + '" isEmbeded="1"/>'
+                ).join('')
+                + '</opf:manifest><opf:spine>'
+                + '<opf:itemref idref="header" linear="yes"/><opf:itemref idref="section0" linear="yes"/>'
+                + '</opf:spine></opf:package>';
+
+            const settingsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<ha:HWPApplicationSetting xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app"'
+                + ' xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0">'
+                + '<ha:CaretPosition listIDRef="0" paraIDRef="0" pos="0"/></ha:HWPApplicationSetting>';
+
+            const previewText = root.textContent.replace(/\s+/g, ' ').trim().slice(0, 1000);
+
+            // mimetype이 첫 번째 무압축 항목이어야 한/글이 패키지를 인식한다
+            const files = [
+                { name: 'mimetype', data: 'application/hwp+zip' },
+                { name: 'version.xml', data: versionXml },
+                { name: 'META-INF/manifest.xml', data: manifestXml },
+                { name: 'META-INF/container.xml', data: containerXml },
+                { name: 'META-INF/container.rdf', data: containerRdf },
+                { name: 'Contents/content.hpf', data: contentHpf },
+                { name: 'Contents/header.xml', data: headerXml },
+                { name: 'Contents/section0.xml', data: sectionXml },
+                { name: 'settings.xml', data: settingsXml },
+                { name: 'Preview/PrvText.txt', data: previewText }
+            ].concat(state.media);
+
+            return docxBuildZip(files);
+        }
+
+        /**
+         * 한글(.hwpx)로 내보내기
+         * 발간물(책자) 서식의 .hwpx 파일 생성
+         */
+        async function exportToHwpx() {
+            try {
+                // 로딩 상태 표시
+                exportHwpxBtn.classList.add('loading');
+                exportHwpxBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="ml-2">생성 중...</span>';
+
+                const hwpxFilename = (currentFilename || 'markdown-document.md').replace(/\.(md|markdown|txt)$/i, '') + '.hwpx';
+                const docTitle = hwpxFilename.replace(/\.hwpx$/i, '');
+                const hwpxBytes = await buildHwpxFromPreview(preview, docTitle);
+                const blob = new Blob([hwpxBytes], { type: HWPX_MIME });
+
+                // File System Access API 지원 시 저장 경로 선택 대화상자 표시
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: hwpxFilename,
+                        types: [{
+                            description: '한글 문서 (.hwpx)',
+                            accept: { [HWPX_MIME]: ['.hwpx'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                } else {
+                    // 폴백: 자동 다운로드
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = hwpxFilename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }
+
+                console.log('✅ 한글(HWPX) 내보내기 완료');
+
+            } catch (error) {
+                if (error.name === 'AbortError') return; // 사용자 취소
+                console.error('❌ 한글(HWPX) 내보내기 오류:', error);
+                alert('한글 문서 생성 중 오류가 발생했습니다:\n' + error.message);
+            } finally {
+                // 로딩 상태 해제
+                exportHwpxBtn.classList.remove('loading');
+                exportHwpxBtn.innerHTML = '<i class="fas fa-file-lines"></i><span class="ml-2">한글</span>';
+            }
+        }
+
         /**
          * 마크다운 파일 열기
          */
@@ -2288,6 +3361,9 @@ Happy Writing! ✍️`;
 
         // Word 내보내기 버튼
         exportWordBtn.addEventListener('click', exportToWord);
+
+        // 한글(HWPX) 내보내기 버튼
+        exportHwpxBtn.addEventListener('click', exportToHwpx);
 
 
         // 키보드 단축키
