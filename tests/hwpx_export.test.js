@@ -26,8 +26,8 @@ test('booklet theme matches the reference publication design', () => {
     assert.match(html, /title: '#2E5964'/);
     assert.match(html, /heading: '#1F3A4D'/);
     assert.match(html, /line: '#DCDCDC'/);
-    // 맑은 고딕 글꼴 등록
-    assert.match(html, /'맑은 고딕'\]/);
+    // 서술식(맑은 고딕)·개조식(휴먼명조/HY헤드라인M) 글꼴 등록
+    assert.match(html, /'맑은 고딕', '휴먼명조', 'HY헤드라인M'\]/);
     // 챕터 표지(번호 배지)와 가나다 섹션 배너
     assert.match(html, /hwpxChapterCover/);
     assert.match(html, /hwpxSectionBanner/);
@@ -58,8 +58,38 @@ test('HWPX converter covers the Markdown feature set', () => {
     assert.match(html, /출처\|자료/);
 });
 
-test('HWPX button sits next to Word and is wired up', () => {
-    assert.match(html, /id="exportWordBtn"[\s\S]*?id="exportHwpxBtn"/);
+test('government(개조식) theme matches the agenda-style reference document', () => {
+    // 제목 상하 0.5mm 남색 괘선 + 우측 부제
+    assert.match(html, /width: '0\.5 mm', color: HWPX_GOV\.colors\.title/);
+    assert.match(html, /hwpxGovTitle/);
+    assert.match(html, /govAfterTitle/);
+    // 걸어쓰기 계층: □(H2)·ㅇ(H3)·-·· 마커와 자동 매핑(ㅇ→-→·→◦)
+    assert.match(html, /H2: \['□', 0/);
+    assert.match(html, /H3: \['ㅇ', 1/);
+    assert.match(html, /\[\['ㅇ', 1, HWPX_GOV\.wFull\], \['-', 2, HWPX_GOV\.wHalf\]/);
+    // ※ 참조·* 각주·⇨ 청색 화살표·붙임 배너
+    assert.match(html, /marker: '※'/);
+    assert.match(html, /marker: '\*'/);
+    assert.match(html, /arrowRe/);
+    assert.match(html, /hwpxGovAttachBanner/);
+    assert.match(html, /(붙임|참고|별첨|별지)/);
+    // 표: 청회색(#D6E0F0) 머리행 + 검정 격자, 숫자·짧은 열 가운데
+    assert.match(html, /thead: '#D6E0F0'/);
+    assert.match(html, /hwpxGovTableToXml/);
+    assert.match(html, /HWPX_NUMERIC_CELL_RE/);
+    // 글꼴·크기: 휴먼명조 15pt 본문, HY헤드라인M 제목 22pt, 남색·청색 강조
+    assert.match(html, /body: 1500/);
+    assert.match(html, /title: 2200/);
+    assert.match(html, /title: '#1F3864'/);
+    assert.match(html, /emph: '#1F4E79'/);
+    // 하단 중앙 "- 1 -" 쪽번호
+    assert.match(html, /hwpxTextRun\('- ', cp\) \+ hwpxPageNumRun\(cp\) \+ hwpxTextRun\(' -', cp\)/);
+});
+
+test('HWPX buttons sit next to Word and are wired up', () => {
+    assert.match(html, /id="exportWordBtn"[\s\S]*?id="exportHwpxBtn"[\s\S]*?id="exportHwpxGovBtn"/);
     assert.match(html, /exportHwpxBtn\.addEventListener\('click', exportToHwpx\)/);
-    assert.match(html, /한글\(\.hwpx\)로 내보내기/);
+    assert.match(html, /exportHwpxGovBtn\.addEventListener\('click', exportToHwpxGov\)/);
+    assert.match(html, /서술식 발간물\(책자\) 서식/);
+    assert.match(html, /개조식 정부 보고서 서식/);
 });
