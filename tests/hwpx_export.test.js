@@ -63,13 +63,27 @@ test('government(개조식) theme matches the agenda-style reference document', 
     assert.match(html, /width: '0\.5 mm', color: HWPX_GOV\.colors\.title/);
     assert.match(html, /hwpxGovTitle/);
     assert.match(html, /govAfterTitle/);
-    // 걸어쓰기 계층: □(H2)·ㅇ(H3)·-·· 마커와 자동 매핑(ㅇ→-→·→◦)
-    assert.match(html, /H2: \['□', 0/);
+    // 걸어쓰기 계층: ㅁ(H2)·ㅇ(H3)·-·· 마커와 수준별 자동 마커(ㅁ / ㅇ / - / ·)
+    assert.match(html, /H2: \['ㅁ', 0/);
     assert.match(html, /H3: \['ㅇ', 1/);
-    assert.match(html, /\[\['ㅇ', 1, HWPX_GOV\.wFull\], \['-', 2, HWPX_GOV\.wHalf\]/);
-    // ※ 참조·* 각주·⇨ 청색 화살표·붙임 배너
+    assert.match(html, /'ㅁ': \[0, 1100\], '□': \[0, 1100\]/);
+    assert.match(html, /autoMarkers: \[\['ㅁ', 1100\], \['ㅇ', 1100\], \['-', 600\], \['·', 600\]\]/);
+    assert.match(html, /govAutoBase/);
+    // ※ 참조·*/** 각주는 부모 수준과 무관하게 4칸 보충 줄, 앞 여백 2 pt
     assert.match(html, /marker: '※'/);
-    assert.match(html, /marker: '\*'/);
+    assert.match(html, /\/\^\(\\\*\\\*\|\\\*\)\\s\//);
+    assert.match(html, /hwpxGovNotePp/);
+    assert.match(html, /prevNote: 200/);
+    // 문단 여백: ㅁ 앞 5 pt·ㅇ 앞 6 pt, (5)·(6)·(2) 여백 지정 줄
+    assert.match(html, /prevL0: 500, nextL0: 150, prevL1: 600, prevLx: 0/);
+    assert.match(html, /spacerRe: \/\^\\\(\(\\d\{1,2\}\)\\\)\$\//);
+    assert.match(html, /hwpxGovSpacerPara/);
+    // 코드블럭에 붙여 넣은 개조식 평문 펼치기, 범위 '~' → '∼' 통일
+    assert.match(html, /hwpxGovLooksLikeOutline/);
+    assert.match(html, /hwpxGovTextLineToXml/);
+    assert.match(html, /hwpxGovNormalize/);
+    assert.match(html, /'\$1 ∼ '/);
+    // ⇨ 청색 화살표·붙임 배너
     assert.match(html, /arrowRe/);
     assert.match(html, /hwpxGovAttachBanner/);
     assert.match(html, /(붙임|참고|별첨|별지)/);

@@ -2147,20 +2147,32 @@ Happy Writing! ✍️`;
         // id 2 = 서술식(맑은 고딕), id 3·4 = 개조식(휴먼명조 본문, HY헤드라인M 제목)
         const HWPX_FONTS = ['함초롬돋움', '함초롬바탕', '맑은 고딕', '휴먼명조', 'HY헤드라인M'];
 
-        // 개조식(정부 보고서) 서식 상수 — md-to-hwpx 정부 프로필과 동일 규격
+        // 개조식(정부 보고서) 서식 상수 — ㅁ / ㅇ / - 3단 계층 + ※·* 보충 규격
         const HWPX_GOV = {
             colors: { title: '#1F3864', emph: '#1F4E79', note: '#404040', thead: '#D6E0F0' },
             sz: { body: 1500, h0: 1600, title: 2200, subtitle: 1200, note: 1300, table: 1300, attach: 1800, footer: 1000 },
             fonts: { gothic: 2, body: 3, head: 4 },
             step: 700, wFull: 1100, wHalf: 600, wNum: 800,
-            prevL0: 600, nextL0: 150, prevL1: 300, prevLx: 80,
-            // 걸어쓰기 마커 -> [수준, 내어쓰기 폭]
+            // 문단 앞 여백(HWPUNIT, 100 = 1 pt) — 원문 빈 문단 글꼴 ㅁ 5 pt·ㅇ 6 pt·보충 2 pt와 같은 간격
+            prevL0: 500, nextL0: 150, prevL1: 600, prevLx: 0, prevNote: 200,
+            // 걸어쓰기 마커 -> [수준, 내어쓰기 폭] (기본은 ㅁ U+3141·ㅇ U+3147, □·○ 등은 입력 허용 이형)
             markers: {
-                '□': [0, 1100], '■': [0, 1100],
+                'ㅁ': [0, 1100], '□': [0, 1100], '■': [0, 1100],
                 'ㅇ': [1, 1100], '○': [1, 1100], '◯': [1, 1100], '❍': [1, 1100],
-                '▸': [2, 1100], '‣': [2, 1100], '▹': [2, 1100],
+                '-': [2, 600], '▸': [2, 1100], '‣': [2, 1100], '▹': [2, 1100],
                 '·': [3, 600], '•': [3, 1100], '◦': [3, 1100], '▪': [3, 1100]
             },
+            // 수준별 자동 마커 [마커, 내어쓰기 폭] — 목록에 마커가 없을 때 ㅁ / ㅇ / - / · 순으로 부여
+            autoMarkers: [['ㅁ', 1100], ['ㅇ', 1100], ['-', 600], ['·', 600]],
+            markerRe: /^([ㅁ□■ㅇ○◯❍▸‣▹·•◦▪])\s+/,
+            markerStripRe: /^\s*[ㅁ□■ㅇ○◯❍▸‣▹·•◦▪]\s*/,
+            // 코드블럭에 그대로 붙여 넣은 개조식 평문 줄(들여쓰기 + 마커)
+            lineRe: /^[ \t]*(ㅁ|□|■|ㅇ|○|◯|❍|▸|‣|▹|-|·|•|◦|▪|※|\*\*|\*|⇨|⇒|➡|▶|►|→)[ \t]+/,
+            // 여백 지정 줄 — (5)·(6)·(2)는 그 pt 크기의 빈 문단이 되고 글자는 남지 않음
+            spacerRe: /^\((\d{1,2})\)$/,
+            // 범위 물결 '~' -> '∼'(U+223C). 앞이 공백인 「약」 용법(~100 MWe)은 그대로 둔다
+            rangeTildeRe: /([0-9’')])[ \t]*~[ \t]*(?=[0-9’'])/g,
+            rangeTildeOpenRe: /\([ \t]*~[ \t]*(?=[0-9’'])/g,
             arrowRe: /^([⇨⇒➡▶►→])\s+/,
             attachRe: /^(붙임|참고|별첨|별지)\s*(\d*)\s+(.+)$/,
             attachBracketRe: /^\[(붙임|참고|별첨|별지)\s*(\d*)\]\s+(.+)$/
@@ -2380,7 +2392,9 @@ Happy Writing! ✍️`;
                     content = content.replace(state.stripPrefixRe, '');
                     state.stripPrefixRe = null;
                 }
-                return hwpxTextRun(content.replace(/[ \t\r\n]+/g, ' '), hwpxCharIdFor(styles, fmt));
+                content = content.replace(/[ \t\r\n]+/g, ' ');
+                if (fmt.gov) content = hwpxGovNormalize(content);
+                return hwpxTextRun(content, hwpxCharIdFor(styles, fmt));
             }
             if (node.nodeType !== Node.ELEMENT_NODE) return '';
 
@@ -2938,10 +2952,12 @@ Happy Writing! ✍️`;
         }
 
         /* ----------------------------------------------------------
-         * 개조식(정부 보고서) 변환 — md-to-hwpx 정부 프로필과 동일 규격:
-         * HY헤드라인M 제목(상하 0.5mm 남색 괘선) + 우측 부제, □/ㅇ/-/· 걸어쓰기,
-         * ※ 참조·* 각주(맑은 고딕 회색), ⇨ 청색 화살표, 붙임 배너,
-         * 청회색 머리행 검정 격자 표, 하단 중앙 "- 1 -" 쪽번호
+         * 개조식(정부 보고서) 변환 — 정부 문서 개조식 규격:
+         * HY헤드라인M 제목(상하 0.5mm 남색 괘선) + 우측 부제,
+         * ㅁ(0칸) / ㅇ(1칸) / -(2칸) 3단 걸어쓰기 + ※·*·**(4칸) 보충(맑은 고딕 회색),
+         * 문단 여백 ㅁ 앞 5 pt·ㅇ 앞 6 pt·보충 앞 2 pt, (5)·(6)·(2) 여백 지정 줄,
+         * 코드블럭에 붙여 넣은 개조식 평문 펼치기, 범위 '~' → '∼' 통일,
+         * ⇨ 청색 화살표, 붙임 배너, 청회색 머리행 검정 격자 표, 하단 중앙 "- 1 -" 쪽번호
          * ---------------------------------------------------------- */
 
         // 걸어쓰기 문단 모양: 마커 폭만큼 내어쓰기
@@ -2952,9 +2968,17 @@ Happy Writing! ✍️`;
             });
         }
 
-        // 수준별 문단 앞 간격 (□ 앞 600, ㅇ 앞 300, 그 아래 80)
+        // 수준별 문단 앞 간격 (ㅁ 앞 5 pt, ㅇ 앞 6 pt, - 줄 사이는 여백 없음)
         function hwpxGovPrev(level) {
             return level === 0 ? HWPX_GOV.prevL0 : (level === 1 ? HWPX_GOV.prevL1 : HWPX_GOV.prevLx);
+        }
+
+        // ※·* 보충 줄 문단 모양 — 부모 수준과 무관하게 「  - 」 본문 시작선(4칸)에 맞춘다
+        function hwpxGovNotePp(styles, width, prev) {
+            const x = HWPX_GOV.step * 2 + HWPX_GOV.wHalf;
+            return styles.paraPr({
+                align: 'LEFT', left: x + width, intent: -width, prev: prev || 0, ls: 160
+            });
         }
 
         /**
@@ -3006,31 +3030,156 @@ Happy Writing! ✍️`;
          * 마커 걸어쓰기 문단 (마커 런 + 본문 런)
          */
         function hwpxGovMarkerPara(state, styles, opts) {
-            const pp = hwpxGovBulletPp(styles, opts.level, opts.width, opts.prev, opts.next);
+            const pp = opts.pp != null
+                ? opts.pp
+                : hwpxGovBulletPp(styles, opts.level, opts.width, opts.prev, opts.next);
             const markerRun = hwpxTextRun(opts.marker + ' ', hwpxCharIdFor(styles, opts.markerFmt));
             return hwpxParagraph(state, pp, markerRun + opts.bodyRuns);
         }
 
         /**
-         * 코드 블록(pre)을 개조식(맑은 고딕 회색, 한 수준 들여쓰기)으로 변환
+         * 개조식 본문 문자열 정리 — 범위 물결을 '∼'(U+223C)로 통일
+         * ('~100 MWe'처럼 앞이 공백인 「약」 용법은 그대로 둔다)
+         */
+        function hwpxGovNormalize(text) {
+            return String(text)
+                .replace(HWPX_GOV.rangeTildeRe, '$1 ∼ ')
+                .replace(HWPX_GOV.rangeTildeOpenRe, '(∼');
+        }
+
+        /**
+         * 여백 지정 줄 「(5)」·「(6)」·「(2)」 — 해당 pt 크기 글꼴의 빈 문단
+         */
+        function hwpxGovSpacerPara(state, styles, pt) {
+            const cp = hwpxCharIdFor(styles, {
+                gov: true, size: Math.min(Math.max(pt, 1), 40) * 100, font: HWPX_GOV.fonts.body
+            });
+            return hwpxParagraph(state, styles.paraPr({ align: 'LEFT', ls: 100 }),
+                '<hp:run charPrIDRef="' + cp + '"><hp:t/></hp:run>');
+        }
+
+        /**
+         * 평문 줄의 **강조**·***청색 강조***를 런으로 변환
+         * (코드블럭 안의 개조식은 마크다운 인라인 파싱을 거치지 않으므로 직접 처리)
+         */
+        function hwpxGovPlainRuns(text, fmt, styles) {
+            const re = /\*\*\*(\S(?:[^*]*\S)?)\*\*\*|\*\*(\S(?:[^*]*\S)?)\*\*/g;
+            let runs = '', last = 0, m;
+            while ((m = re.exec(text)) !== null) {
+                if (m.index > last) {
+                    runs += hwpxTextRun(hwpxGovNormalize(text.slice(last, m.index)), hwpxCharIdFor(styles, fmt));
+                }
+                const emph = m[1] != null;
+                runs += hwpxTextRun(hwpxGovNormalize(emph ? m[1] : m[2]), hwpxCharIdFor(styles,
+                    Object.assign({}, fmt, emph ? { bold: true, color: HWPX_GOV.colors.emph } : { bold: true })));
+                last = re.lastIndex;
+            }
+            if (last < text.length) {
+                runs += hwpxTextRun(hwpxGovNormalize(text.slice(last)), hwpxCharIdFor(styles, fmt));
+            }
+            return runs;
+        }
+
+        /**
+         * 코드블럭 내용이 개조식 평문인지 판정 — 빈 줄·여백 줄을 뺀 줄의 6할 이상이 마커 줄.
+         * 들여쓰지 않은 '-' 줄(YAML 목록 등)은 ㅁ/ㅇ 계층 줄이 함께 있을 때만 마커로 센다
+         */
+        function hwpxGovLooksLikeOutline(lines) {
+            let marked = 0, total = 0, hasLevelLine = false, bareDash = 0;
+            lines.forEach(line => {
+                const t = line.trim();
+                if (t === '' || HWPX_GOV.spacerRe.test(t)) return;
+                total++;
+                const m = HWPX_GOV.lineRe.exec(line);
+                if (!m) return;
+                if (m[1] === '-' && !/^[ \t]/.test(line)) { bareDash++; return; }
+                if (HWPX_GOV.markers[m[1]] && HWPX_GOV.markers[m[1]][0] <= 1) hasLevelLine = true;
+                marked++;
+            });
+            if (hasLevelLine) marked += bareDash;
+            return total > 0 && marked * 10 >= total * 6;
+        }
+
+        /**
+         * 개조식 평문 한 줄 -> 걸어쓰기 문단
+         *  ㅁ(0칸)·ㅇ(1칸)·-(2칸)는 계층, ※·*·**(4칸)는 직전 줄의 보충
+         *  빈 줄은 문단 앞 여백으로 대신하고 (5)·(6)·(2) 줄은 그 크기의 빈 문단으로 바꾼다
+         */
+        function hwpxGovTextLineToXml(line, state, styles) {
+            const text = line.replace(/\s+$/, '');
+            if (text.trim() === '') return '';
+            const mSpacer = HWPX_GOV.spacerRe.exec(text.trim());
+            if (mSpacer) return hwpxGovSpacerPara(state, styles, parseInt(mSpacer[1], 10));
+            const bodyBase = { gov: true, size: HWPX_GOV.sz.body, font: HWPX_GOV.fonts.body };
+            const noteBase = { gov: true, size: HWPX_GOV.sz.note, font: HWPX_GOV.fonts.gothic, color: HWPX_GOV.colors.note };
+            const m = HWPX_GOV.lineRe.exec(text);
+            if (!m) {
+                // 마커 없는 줄 — 앞 줄에 이어 쓰는 본문
+                const level = Math.max(state.govLastLevel, 1);
+                const pp = styles.paraPr({ align: 'LEFT', left: HWPX_GOV.step * level + HWPX_GOV.wFull, ls: 160 });
+                return hwpxParagraph(state, pp, hwpxGovPlainRuns(text.trim(), bodyBase, styles));
+            }
+            const marker = m[1];
+            const body = text.slice(m[0].length);
+            if (marker === '※' || marker === '*' || marker === '**') {
+                return hwpxGovMarkerPara(state, styles, {
+                    marker, markerFmt: noteBase, bodyRuns: hwpxGovPlainRuns(body, noteBase, styles),
+                    pp: hwpxGovNotePp(styles, marker === '※' ? HWPX_GOV.wFull : HWPX_GOV.wHalf, HWPX_GOV.prevNote)
+                });
+            }
+            if ('⇨⇒➡▶►→'.indexOf(marker) >= 0) {
+                return hwpxGovMarkerPara(state, styles, {
+                    marker, level: Math.min(state.govLastLevel + 1, 3), width: HWPX_GOV.wFull,
+                    markerFmt: Object.assign({}, bodyBase, { bold: true, color: HWPX_GOV.colors.emph }),
+                    bodyRuns: hwpxGovPlainRuns(body, bodyBase, styles), prev: HWPX_GOV.prevLx
+                });
+            }
+            const level = HWPX_GOV.markers[marker][0];
+            const width = HWPX_GOV.markers[marker][1];
+            const fmt = level === 0
+                ? { gov: true, size: HWPX_GOV.sz.h0, font: HWPX_GOV.fonts.head, bold: true }
+                : bodyBase;
+            const xml = hwpxGovMarkerPara(state, styles, {
+                marker, level, width, markerFmt: fmt, bodyRuns: hwpxGovPlainRuns(body, fmt, styles),
+                prev: hwpxGovPrev(level), next: level === 0 ? HWPX_GOV.nextL0 : 0
+            });
+            state.govLastLevel = level;
+            state.govAutoBase = Math.min(level + 1, 3);
+            return xml;
+        }
+
+        /**
+         * 코드 블록(pre) 변환
+         *  - 개조식 평문(ㅁ / ㅇ / - / ※ / * 줄)이면 걸어쓰기 계층으로 펼친다 — 개조식 초안을
+         *    코드블럭째 붙여 넣는 작성 방식을 그대로 지원
+         *  - 그 밖의 코드는 맑은 고딕 회색, 한 수준 들여쓰기로 원문 유지
          */
         function hwpxGovPreToXml(pre, state, styles) {
+            const lines = pre.textContent.replace(/\n+$/, '').split('\n');
+            // ```python처럼 언어를 지정한 코드는 개조식으로 해석하지 않는다
+            const code = pre.querySelector('code');
+            const lang = code && /(?:^|\s)language-([\w-]+)/.exec(code.className || '');
+            const isCode = lang && !/^(text|txt|plain|plaintext|md|markdown)$/i.test(lang[1]);
+            if (!isCode && hwpxGovLooksLikeOutline(lines)) {
+                return lines.map(line => hwpxGovTextLineToXml(line, state, styles)).join('');
+            }
             const cp = hwpxCharIdFor(styles, {
                 size: HWPX_GOV.sz.note, font: HWPX_GOV.fonts.gothic, color: HWPX_GOV.colors.note
             });
             const pp = styles.paraPr({ align: 'LEFT', left: HWPX_GOV.step + HWPX_GOV.wHalf, ls: 150 });
-            const lines = pre.textContent.replace(/\n$/, '').split('\n');
             return lines.map(line => hwpxParagraph(state, pp, hwpxTextRun(line || ' ', cp))).join('');
         }
 
         /**
-         * 목록(ul/ol)을 개조식 걸어쓰기(ㅇ→-→·→◦, 번호는 "1.")로 변환
-         * (항목이 □/ㅇ/▸/· 등 정부 마커로 시작하면 그 마커·수준을 보존)
+         * 목록(ul/ol)을 개조식 걸어쓰기(ㅁ / ㅇ / - / ·, 번호는 "1.")로 변환
+         * (항목이 ㅁ/ㅇ/▸/· 등 정부 마커로 시작하면 그 마커·수준을 보존)
          */
         function hwpxGovListToXml(list, depth, state, styles, ctx) {
             const ordered = list.tagName === 'OL';
-            const AUTO = [['ㅇ', 1, HWPX_GOV.wFull], ['-', 2, HWPX_GOV.wHalf],
-                          ['·', 3, HWPX_GOV.wHalf], ['◦', 3, HWPX_GOV.wFull]];
+            // 마커 없는 목록은 「직전 줄의 다음 수준」에서 시작하고(ㅇ 아래 목록 → -),
+            // 한 목록 안의 형제 항목은 모두 같은 수준을 쓴다
+            const autoLevel = Math.min(Math.max(state.govAutoBase, 1), HWPX_GOV.autoMarkers.length - 1);
+            const auto = HWPX_GOV.autoMarkers[autoLevel];
             let index = ordered ? (parseInt(list.getAttribute('start') || '1', 10) || 1) : 0;
             let xml = '';
             Array.from(list.children).forEach(li => {
@@ -3040,11 +3189,11 @@ Happy Writing! ✍️`;
                 let markerFmt = null;
                 let bodyBase = { gov: true, size: HWPX_GOV.sz.body, font: HWPX_GOV.fonts.body };
                 let strip = null;
-                const mGov = /^([□■ㅇ○◯❍▸‣▹·•◦▪])\s+/.exec(liText);
+                const mGov = HWPX_GOV.markerRe.exec(liText);
                 const mArrow = HWPX_GOV.arrowRe.exec(liText);
                 if (ordered) {
                     marker = index + '.';
-                    level = Math.min(depth + 1, 3);
+                    level = autoLevel;
                     width = HWPX_GOV.wNum;
                 } else if (mGov) {
                     marker = mGov[1];
@@ -3058,10 +3207,9 @@ Happy Writing! ✍️`;
                     markerFmt = { gov: true, size: HWPX_GOV.sz.body, font: HWPX_GOV.fonts.body, bold: true, color: HWPX_GOV.colors.emph };
                     strip = new RegExp('^\\s*' + marker + '\\s*');
                 } else {
-                    const auto = AUTO[Math.min(depth, AUTO.length - 1)];
                     marker = auto[0];
-                    level = auto[1];
-                    width = auto[2];
+                    level = autoLevel;
+                    width = auto[1];
                 }
                 if (level === 0) {
                     bodyBase = { gov: true, size: HWPX_GOV.sz.h0, font: HWPX_GOV.fonts.head, bold: true };
@@ -3079,6 +3227,9 @@ Happy Writing! ✍️`;
                             marker, level, width, markerFmt, bodyRuns: inlineBuffer,
                             prev: hwpxGovPrev(level), next: level === 0 ? HWPX_GOV.nextL0 : 0
                         });
+                        // 하위 목록·※·*는 이 항목의 다음 수준에서 이어진다
+                        state.govLastLevel = level;
+                        state.govAutoBase = Math.min(level + 1, 3);
                     } else {
                         xml += hwpxParagraph(state, ppCont, inlineBuffer);
                     }
@@ -3132,6 +3283,7 @@ Happy Writing! ✍️`;
                     xml += hwpxGovTitle(node, state, styles);
                     state.govAfterTitle = true;
                     state.govLastLevel = 1;
+                    state.govAutoBase = 1;
                     return;
                 }
                 // 제목 직후 인용(>)은 우측 부제(일자·부서)로
@@ -3159,16 +3311,16 @@ Happy Writing! ✍️`;
                         xml += hwpxGovAttachBanner(state, styles, (mAttach[1] + mAttach[2]).trim(), titleRuns);
                         return;
                     }
-                    // H2=□ 16pt, H3=ㅇ 15pt, H4=- 14pt, H5=· 13.5pt, H6=◦ 13pt
+                    // H2=ㅁ 16pt, H3=ㅇ 15pt, H4=- 14pt, H5=· 13.5pt, H6=◦ 13pt
                     const spec = {
-                        H2: ['□', 0, HWPX_GOV.sz.h0, HWPX_GOV.wFull],
+                        H2: ['ㅁ', 0, HWPX_GOV.sz.h0, HWPX_GOV.wFull],
                         H3: ['ㅇ', 1, HWPX_GOV.sz.body, HWPX_GOV.wFull],
                         H4: ['-', 2, HWPX_GOV.sz.body - 100, HWPX_GOV.wHalf],
                         H5: ['·', 3, HWPX_GOV.sz.body - 150, HWPX_GOV.wHalf],
                         H6: ['◦', 3, HWPX_GOV.sz.note, HWPX_GOV.wFull]
                     }[tag];
                     // 작성자가 마커를 직접 썼으면 제거 후 표준 마커 적용
-                    state.stripPrefixRe = /^\s*[□■ㅇ○◯❍▸‣▹·•◦▪]\s*/;
+                    state.stripPrefixRe = HWPX_GOV.markerStripRe;
                     const fmt = { gov: true, size: spec[2], font: HWPX_GOV.fonts.head, bold: true };
                     const bodyRuns = hwpxInlineToRuns(node, fmt, state, styles);
                     state.stripPrefixRe = null;
@@ -3177,6 +3329,7 @@ Happy Writing! ✍️`;
                         prev: hwpxGovPrev(spec[1]), next: spec[1] === 0 ? HWPX_GOV.nextL0 : 0
                     });
                     state.govLastLevel = spec[1];
+                    state.govAutoBase = Math.min(spec[1] + 1, 3);
                     return;
                 }
 
@@ -3190,6 +3343,12 @@ Happy Writing! ✍️`;
                             node.querySelectorAll('img').forEach(img => {
                                 xml += hwpxParagraph(state, ppImg, hwpxPicRun(img, state, styles));
                             });
+                            break;
+                        }
+                        // (5)·(6)·(2) 여백 지정 줄
+                        const mSpacer = HWPX_GOV.spacerRe.exec(text);
+                        if (mSpacer) {
+                            xml += hwpxGovSpacerPara(state, styles, parseInt(mSpacer[1], 10));
                             break;
                         }
                         const mBracket = HWPX_GOV.attachBracketRe.exec(text);
@@ -3207,8 +3366,8 @@ Happy Writing! ✍️`;
                             const bodyRuns = hwpxInlineToRuns(node, noteBase, state, styles);
                             state.stripPrefixRe = null;
                             xml += hwpxGovMarkerPara(state, styles, {
-                                marker: '※', level: Math.max(state.govLastLevel, 1), width: HWPX_GOV.wFull,
-                                markerFmt: noteBase, bodyRuns, prev: HWPX_GOV.prevLx
+                                marker: '※', markerFmt: noteBase, bodyRuns,
+                                pp: hwpxGovNotePp(styles, HWPX_GOV.wFull, HWPX_GOV.prevNote)
                             });
                             break;
                         }
@@ -3224,7 +3383,7 @@ Happy Writing! ✍️`;
                             });
                             break;
                         }
-                        const mGov = /^([□■ㅇ○◯❍▸‣▹·•◦▪])\s+/.exec(text);
+                        const mGov = HWPX_GOV.markerRe.exec(text);
                         if (mGov) {
                             const marker = mGov[1];
                             const level = HWPX_GOV.markers[marker][0];
@@ -3240,15 +3399,18 @@ Happy Writing! ✍️`;
                                 prev: hwpxGovPrev(level), next: level === 0 ? HWPX_GOV.nextL0 : 0
                             });
                             state.govLastLevel = level;
+                            state.govAutoBase = Math.min(level + 1, 3);
                             break;
                         }
-                        if (/^\*\s/.test(text)) {
-                            state.stripPrefixRe = /^\s*\*\s*/;
+                        // * / ** 각주 줄 — 본문 용어 뒤 표시와 같은 순서로 붙는 보충
+                        const mNote = /^(\*\*|\*)\s/.exec(text);
+                        if (mNote) {
+                            state.stripPrefixRe = mNote[1] === '**' ? /^\s*\*\*\s*/ : /^\s*\*\s*/;
                             const bodyRuns = hwpxInlineToRuns(node, noteBase, state, styles);
                             state.stripPrefixRe = null;
                             xml += hwpxGovMarkerPara(state, styles, {
-                                marker: '*', level: Math.min(state.govLastLevel + 1, 3), width: HWPX_GOV.wHalf,
-                                markerFmt: noteBase, bodyRuns, prev: HWPX_GOV.prevLx
+                                marker: mNote[1], markerFmt: noteBase, bodyRuns,
+                                pp: hwpxGovNotePp(styles, HWPX_GOV.wHalf, HWPX_GOV.prevNote)
                             });
                             break;
                         }
@@ -3500,6 +3662,7 @@ Happy Writing! ✍️`;
                 sectionCounter: 0,
                 coverEmitted: false,
                 govLastLevel: 1,
+                govAutoBase: 1,
                 govAfterTitle: false,
                 stripPrefixRe: null
             };
