@@ -2329,9 +2329,8 @@ Happy Writing! ✍️`;
             });
             styles.bfGovAttachLabel = styles.borderFill(Object.assign({ fill: HWPX_GOV.colors.title }, govGrid));
             styles.bfGovAttachTitle = styles.borderFill({ bottom: { width: '0.4 mm', color: HWPX_GOV.colors.title } });
-            // ㅁ 제목 번호 박스(글자 테두리)와 ◈ 배너 상자(문단 테두리)
+            // ㅁ 제목 번호 박스(글자 테두리)
             styles.bfGovNumBox = styles.borderFill(Object.assign({}, govGrid));
-            styles.bfGovBanner = styles.borderFill(Object.assign({}, govGrid));
             return styles;
         }
 
@@ -3001,13 +3000,10 @@ Happy Writing! ✍️`;
         }
 
         /**
-         * 개조식 문서 제목 — 「◈ 제목」 사방 테두리 상자 배너 (왼쪽 정렬, 검정 굵은 고딕)
+         * 개조식 문서 제목 — 「◈ 제목」 한 줄 (테두리 없음, 왼쪽 정렬, 검정 굵은 고딕)
          */
         function hwpxGovTitle(h1, state, styles) {
-            const pp = styles.paraPr({
-                align: 'LEFT', left: 200, prev: 200, next: 200, ls: 160,
-                borderBf: styles.bfGovBanner, borderOff: [200, 200, 150, 150]
-            });
+            const pp = styles.paraPr({ align: 'LEFT', prev: 200, next: 200, ls: 160 });
             const fmt = { gov: true, size: HWPX_GOV.sz.title, font: HWPX_GOV.fonts.head, bold: true };
             const prefix = /^\s*◈/.test(h1.textContent) ? '' : hwpxTextRun('◈ ', hwpxCharIdFor(styles, fmt));
             const runs = hwpxInlineToRuns(h1, fmt, state, styles);

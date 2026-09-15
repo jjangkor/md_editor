@@ -59,8 +59,8 @@ test('HWPX converter covers the Markdown feature set', () => {
 });
 
 test('government(개조식) theme matches the agenda-style reference document', () => {
-    // 「◈ 제목」 사방 테두리 배너 + 우측 부제, ㅁ 제목은 번호 박스 + 남색 굵은 고딕
-    assert.match(html, /bfGovBanner/);
+    // 「◈ 제목」 한 줄 배너(테두리 없음) + 우측 부제, ㅁ 제목은 번호 박스 + 남색 굵은 고딕
+    assert.doesNotMatch(html, /bfGovBanner/);
     assert.match(html, /hwpxTextRun\('◈ ', hwpxCharIdFor\(styles, fmt\)\)/);
     assert.match(html, /hwpxGovTitle/);
     assert.match(html, /govAfterTitle/);
