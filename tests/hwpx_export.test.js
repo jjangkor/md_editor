@@ -59,18 +59,28 @@ test('HWPX converter covers the Markdown feature set', () => {
 });
 
 test('government(개조식) theme matches the agenda-style reference document', () => {
-    // 제목 상하 0.5mm 남색 괘선 + 우측 부제
-    assert.match(html, /width: '0\.5 mm', color: HWPX_GOV\.colors\.title/);
+    // 「◈ 제목」 사방 테두리 배너 + 우측 부제, ㅁ 제목은 번호 박스 + 남색 굵은 고딕
+    assert.match(html, /bfGovBanner/);
+    assert.match(html, /hwpxTextRun\('◈ ', hwpxCharIdFor\(styles, fmt\)\)/);
     assert.match(html, /hwpxGovTitle/);
     assert.match(html, /govAfterTitle/);
+    assert.match(html, /bfGovNumBox/);
+    assert.match(html, /hwpxGovLevel0/);
+    assert.match(html, /color: HWPX_GOV\.colors\.title \}/);
+    // ㅇ 줄머리 (라벨) 청색 굵게, 괄호 부연 작은 글자, ※ 갈래 둘째 줄 이어쓰기
+    assert.match(html, /label: '#2B65B8'/);
+    assert.match(html, /hwpxGovSplitLabel/);
+    assert.match(html, /hwpxGovParenRuns/);
+    assert.match(html, /paren: 1300/);
+    assert.match(html, /marker: cont \? '' : '※'/);
     // 걸어쓰기 계층: ㅁ(H2)·ㅇ(H3)·-·· 마커와 수준별 자동 마커(ㅁ / ㅇ / - / ·)
     assert.match(html, /H2: \['ㅁ', 0/);
     assert.match(html, /H3: \['ㅇ', 1/);
     assert.match(html, /'ㅁ': \[0, 1100\], '□': \[0, 1100\]/);
     assert.match(html, /autoMarkers: \[\['ㅁ', 1100\], \['ㅇ', 1100\], \['-', 600\], \['·', 600\]\]/);
     assert.match(html, /govAutoBase/);
-    // ※ 참조·*/** 각주는 부모 수준과 무관하게 4칸 보충 줄, 앞 여백 2 pt
-    assert.match(html, /marker: '※'/);
+    // ※ 참조·*/** 각주는 부모 수준과 무관하게 ㅇ 본문 시작선의 보충 줄, 앞 여백 2 pt
+    assert.match(html, /const x = HWPX_GOV\.step \+ HWPX_GOV\.wFull;/);
     assert.match(html, /\/\^\(\\\*\\\*\|\\\*\)\\s\//);
     assert.match(html, /hwpxGovNotePp/);
     assert.match(html, /prevNote: 200/);
@@ -91,9 +101,10 @@ test('government(개조식) theme matches the agenda-style reference document', 
     assert.match(html, /thead: '#D6E0F0'/);
     assert.match(html, /hwpxGovTableToXml/);
     assert.match(html, /HWPX_NUMERIC_CELL_RE/);
-    // 글꼴·크기: 휴먼명조 15pt 본문, HY헤드라인M 제목 22pt, 남색·청색 강조
+    // 글꼴·크기: 휴먼명조 15pt 본문, HY헤드라인M 배너 16pt, 보충 12pt, 남색·청색 강조
     assert.match(html, /body: 1500/);
-    assert.match(html, /title: 2200/);
+    assert.match(html, /title: 1600/);
+    assert.match(html, /note: 1200/);
     assert.match(html, /title: '#1F3864'/);
     assert.match(html, /emph: '#1F4E79'/);
     // 하단 중앙 "- 1 -" 쪽번호
