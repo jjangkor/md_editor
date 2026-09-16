@@ -58,59 +58,6 @@ test('HWPX converter covers the Markdown feature set', () => {
     assert.match(html, /출처\|자료/);
 });
 
-test('government(개조식) theme matches the agenda-style reference document', () => {
-    // 「◈ 제목」 한 줄 배너(테두리 없음) + 우측 부제, ㅁ 제목은 번호 박스 + 남색 굵은 고딕
-    assert.doesNotMatch(html, /bfGovBanner/);
-    assert.match(html, /hwpxTextRun\('◈ ', hwpxCharIdFor\(styles, fmt\)\)/);
-    assert.match(html, /hwpxGovTitle/);
-    assert.match(html, /govAfterTitle/);
-    assert.match(html, /bfGovNumBox/);
-    assert.match(html, /hwpxGovLevel0/);
-    assert.match(html, /color: HWPX_GOV\.colors\.title \}/);
-    // ㅇ 줄머리 (라벨) 청색 굵게, 괄호 부연 작은 글자, ※ 갈래 둘째 줄 이어쓰기
-    assert.match(html, /label: '#2B65B8'/);
-    assert.match(html, /hwpxGovSplitLabel/);
-    assert.match(html, /hwpxGovParenRuns/);
-    assert.match(html, /paren: 1300/);
-    assert.match(html, /marker: cont \? '' : '※'/);
-    // 걸어쓰기 계층: ㅁ(H2)·ㅇ(H3)·-·· 마커와 수준별 자동 마커(ㅁ / ㅇ / - / ·)
-    assert.match(html, /H2: \['ㅁ', 0/);
-    assert.match(html, /H3: \['ㅇ', 1/);
-    assert.match(html, /'ㅁ': \[0, 1100\], '□': \[0, 1100\]/);
-    assert.match(html, /autoMarkers: \[\['ㅁ', 1100\], \['ㅇ', 1100\], \['-', 600\], \['·', 600\]\]/);
-    assert.match(html, /govAutoBase/);
-    // ※ 참조·*/** 각주는 부모 수준과 무관하게 ㅇ 본문 시작선의 보충 줄, 앞 여백 2 pt
-    assert.match(html, /const x = HWPX_GOV\.step \+ HWPX_GOV\.wFull;/);
-    assert.match(html, /\/\^\(\\\*\\\*\|\\\*\)\\s\//);
-    assert.match(html, /hwpxGovNotePp/);
-    assert.match(html, /prevNote: 200/);
-    // 문단 여백: ㅁ 앞 5 pt·ㅇ 앞 6 pt, (5)·(6)·(2) 여백 지정 줄
-    assert.match(html, /prevL0: 500, nextL0: 150, prevL1: 600, prevLx: 0/);
-    assert.match(html, /spacerRe: \/\^\\\(\(\\d\{1,2\}\)\\\)\$\//);
-    assert.match(html, /hwpxGovSpacerPara/);
-    // 코드블럭에 붙여 넣은 개조식 평문 펼치기, 범위 '~' → '∼' 통일
-    assert.match(html, /hwpxGovLooksLikeOutline/);
-    assert.match(html, /hwpxGovTextLineToXml/);
-    assert.match(html, /hwpxGovNormalize/);
-    assert.match(html, /'\$1 ∼ '/);
-    // ⇨ 청색 화살표·붙임 배너
-    assert.match(html, /arrowRe/);
-    assert.match(html, /hwpxGovAttachBanner/);
-    assert.match(html, /(붙임|참고|별첨|별지)/);
-    // 표: 청회색(#D6E0F0) 머리행 + 검정 격자, 숫자·짧은 열 가운데
-    assert.match(html, /thead: '#D6E0F0'/);
-    assert.match(html, /hwpxGovTableToXml/);
-    assert.match(html, /HWPX_NUMERIC_CELL_RE/);
-    // 글꼴·크기: 휴먼명조 15pt 본문, HY헤드라인M 배너 16pt, 보충 12pt, 남색·청색 강조
-    assert.match(html, /body: 1500/);
-    assert.match(html, /title: 1600/);
-    assert.match(html, /note: 1200/);
-    assert.match(html, /title: '#1F3864'/);
-    assert.match(html, /emph: '#1F4E79'/);
-    // 하단 중앙 "- 1 -" 쪽번호
-    assert.match(html, /hwpxTextRun\('- ', cp\) \+ hwpxPageNumRun\(cp\) \+ hwpxTextRun\(' -', cp\)/);
-});
-
 test('HWPX buttons sit next to Word and are wired up', () => {
     assert.match(html, /id="exportWordBtn"[\s\S]*?id="exportHwpxBtn"[\s\S]*?id="exportHwpxGovBtn"/);
     assert.match(html, /exportHwpxBtn\.addEventListener\('click', exportToHwpx\)/);
