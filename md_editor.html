@@ -2149,23 +2149,23 @@ Happy Writing! ✍️`;
 
         // 개조식(정부 보고서) 서식 상수 — ㅁ / ㅇ / - 3단 계층 + ※·* 보충 규격
         const HWPX_GOV = {
-            // title: ㅁ 제목 남색, label: ㅇ 줄머리 (라벨) 청색, emph: ⇨·***강조*** 청색, note: ※·* 보충 회색
-            colors: { title: '#1F3864', label: '#2B65B8', emph: '#1F4E79', note: '#404040', thead: '#D6E0F0' },
+            // title: 붙임 배너 남색, label/emph: 줄머리·선택 강조 파랑, note: 보충 회색
+            colors: { title: '#1F3864', label: '#0000FF', emph: '#0000FF', note: '#333333', thead: '#D6E0F0' },
             // body 15pt 본문, h0 16pt ㅁ 제목, numBox 13pt 번호 박스, paren 13pt 괄호 부연, note 12pt ※·* 보충
-            sz: { body: 1500, h0: 1600, numBox: 1300, paren: 1300, title: 1600, subtitle: 1200, note: 1200, table: 1300, attach: 1800, footer: 1000 },
+            sz: { body: 1500, h0: 1600, numBox: 1300, paren: 1300, title: 1800, subtitle: 1200, note: 1200, table: 1300, attach: 1800, footer: 1000 },
             fonts: { gothic: 2, body: 3, head: 4 },
-            step: 700, wFull: 1100, wHalf: 600, wNum: 800,
+            step: 700, wFull: 2000, wHalf: 1200, wNum: 2400,
             // 문단 앞 여백(HWPUNIT, 100 = 1 pt) — 원문 빈 문단 글꼴 ㅁ 5 pt·ㅇ 6 pt·보충 2 pt와 같은 간격
             prevL0: 500, nextL0: 150, prevL1: 600, prevLx: 0, prevNote: 200,
-            // 걸어쓰기 마커 -> [수준, 내어쓰기 폭] (기본은 ㅁ U+3141·ㅇ U+3147, □·○ 등은 입력 허용 이형)
+            // 걸어쓰기 마커 -> [수준, 내어쓰기 폭] (ㅁ·□는 번호 상자, ㅇ·○ 등은 입력 마커 보존)
             markers: {
-                'ㅁ': [0, 1100], '□': [0, 1100], '■': [0, 1100],
-                'ㅇ': [1, 1100], '○': [1, 1100], '◯': [1, 1100], '❍': [1, 1100],
-                '-': [2, 600], '▸': [2, 1100], '‣': [2, 1100], '▹': [2, 1100],
-                '·': [3, 600], '•': [3, 1100], '◦': [3, 1100], '▪': [3, 1100]
+                'ㅁ': [0, 2000], '□': [0, 2000], '■': [0, 2000],
+                'ㅇ': [1, 2000], '○': [1, 2000], '◯': [1, 2000], '❍': [1, 2000],
+                '-': [2, 1200], '▸': [2, 2000], '‣': [2, 2000], '▹': [2, 2000],
+                '·': [3, 1200], '•': [3, 2000], '◦': [3, 2000], '▪': [3, 2000]
             },
-            // 수준별 자동 마커 [마커, 내어쓰기 폭] — 목록에 마커가 없을 때 ㅁ / ㅇ / - / · 순으로 부여
-            autoMarkers: [['ㅁ', 1100], ['ㅇ', 1100], ['-', 600], ['·', 600]],
+            // 수준별 자동 마커 [마커, 내어쓰기 폭] — 마커 없는 목록은 ○ / - / · 순으로 부여
+            autoMarkers: [['ㅁ', 2000], ['○', 2000], ['-', 1200], ['·', 1200]],
             markerRe: /^([ㅁ□■ㅇ○◯❍▸‣▹·•◦▪])\s+/,
             markerStripRe: /^\s*[ㅁ□■ㅇ○◯❍▸‣▹·•◦▪]\s*/,
             // 코드블럭에 그대로 붙여 넣은 개조식 평문 줄(들여쓰기 + 마커)
@@ -2286,8 +2286,8 @@ Happy Writing! ✍️`;
          * (id 0~19 문단·0~6 글자·1~2 테두리는 한/글 기본 템플릿 몫으로 예약)
          */
         function hwpxCreateStyles() {
-            const custom = { paraPr: [], charPr: [], borderFill: [] };
-            const cache = { paraPr: new Map(), charPr: new Map(), borderFill: new Map() };
+            const custom = { paraPr: [], charPr: [], borderFill: [], tabPr: [] };
+            const cache = { paraPr: new Map(), charPr: new Map(), borderFill: new Map(), tabPr: new Map() };
             const register = (kind, base, builder, opts) => {
                 const key = JSON.stringify(opts);
                 if (cache[kind].has(key)) return cache[kind].get(key);
@@ -2300,7 +2300,11 @@ Happy Writing! ✍️`;
                 custom,
                 paraPr: opts => register('paraPr', 20, hwpxParaPrXml, opts),
                 charPr: opts => register('charPr', 7, hwpxCharPrXml, opts),
-                borderFill: opts => register('borderFill', 3, hwpxBorderFillXml, opts)
+                borderFill: opts => register('borderFill', 3, hwpxBorderFillXml, opts),
+                tabPr: pos => register('tabPr', 3, (id, o) =>
+                    '<hh:tabPr id="' + id + '" autoTabLeft="0" autoTabRight="0">'
+                    + '<hh:tabItem pos="' + o.pos + '" type="LEFT" leader="NONE" unit="HWPUNIT"/>'
+                    + '</hh:tabPr>', { pos })
             };
             const hairline = { width: '0.12 mm', color: HWPX_COLORS.line };
             styles.bfNone = styles.borderFill({});
@@ -2324,8 +2328,14 @@ Happy Writing! ✍️`;
             styles.bfGovCell = styles.borderFill(Object.assign({}, govGrid));
             styles.bfGovHead = styles.borderFill(Object.assign({ fill: HWPX_GOV.colors.thead }, govGrid));
             styles.bfGovTitleRule = styles.borderFill({
-                top: { width: '0.5 mm', color: HWPX_GOV.colors.title },
-                bottom: { width: '0.5 mm', color: HWPX_GOV.colors.title }
+                fill: '#F2F7FC',
+                top: { width: '0.3 mm', color: '#8EAADB' },
+                bottom: { width: '0.3 mm', color: '#8EAADB' }
+            });
+            styles.bfGovSectionRule = styles.borderFill({
+                fill: '#F8F8F4',
+                top: { width: '0.12 mm', color: '#808080' },
+                bottom: { width: '0.12 mm', color: '#808080' }
             });
             styles.bfGovAttachLabel = styles.borderFill(Object.assign({ fill: HWPX_GOV.colors.title }, govGrid));
             styles.bfGovAttachTitle = styles.borderFill({ bottom: { width: '0.4 mm', color: HWPX_GOV.colors.title } });
@@ -2344,7 +2354,7 @@ Happy Writing! ✍️`;
             let italic = !!(fmt.italic || fmt.math);
             let underline = !!fmt.underline;
             if (fmt.gov) {
-                if (bold && fmt.italic && !fmt.math) { color = color || HWPX_GOV.colors.emph; italic = false; }
+                if (bold && fmt.italic && !fmt.math) { color = HWPX_GOV.colors.emph; italic = false; }
                 if (!color) color = '#000000';
             } else {
                 if (!color) color = fmt.link ? HWPX_COLORS.accent : HWPX_COLORS.body;
@@ -2367,9 +2377,9 @@ Happy Writing! ✍️`;
          */
         function hwpxTextRun(text, charPrId) {
             if (text === '') return '';
-            const parts = String(text).split('\t').map(seg =>
-                seg === '' ? '' : '<hp:t>' + hwpxEscape(seg) + '</hp:t>');
-            return '<hp:run charPrIDRef="' + charPrId + '">' + parts.join('<hp:tab/>') + '</hp:run>';
+            const content = String(text).split('\t').map(seg => hwpxEscape(seg))
+                .join('<hp:tab width="0" leader="0" type="1"/>');
+            return '<hp:run charPrIDRef="' + charPrId + '"><hp:t>' + content + '</hp:t></hp:run>';
         }
 
         /**
@@ -2386,7 +2396,20 @@ Happy Writing! ✍️`;
          * 미리보기의 인라인 노드를 HWPX 런 목록으로 변환
          */
         function hwpxInlineToRuns(node, fmt, state, styles) {
+            // 마커/라벨이 strong·em 등 여러 텍스트 노드에 걸쳐 있어도 한 번에 처리한다.
+            if (fmt.gov && node.nodeType === Node.ELEMENT_NODE && (state.stripPrefixRe || state.govLabelFmt)) {
+                const copy = node.cloneNode(true);
+                const prefix = state.stripPrefixRe && state.stripPrefixRe.exec(copy.textContent);
+                if (prefix) hwpxGovRemoveTextPrefix(copy, prefix[0].length);
+                const label = state.govLabelFmt && /^\s*\([^()]{1,24}\)[ \t]*/.exec(copy.textContent);
+                const labelRuns = label ? hwpxGovSplitLabel(label[0].trimStart(), state.govLabelFmt, styles).runs : '';
+                if (label) hwpxGovRemoveTextPrefix(copy, label[0].length);
+                state.stripPrefixRe = null;
+                state.govLabelFmt = null;
+                return labelRuns + hwpxInlineToRuns(copy, fmt, state, styles);
+            }
             if (node.nodeType === Node.TEXT_NODE) {
+                if (node.textContent === '') return '';
                 if (node.textContent.trim() === '') {
                     const isBlock = el => el && el.nodeType === Node.ELEMENT_NODE
                         && /^(UL|OL|P|PRE|TABLE|BLOCKQUOTE|DIV|LI|H[1-6]|TR|TD|TH)$/.test(el.tagName);
@@ -2424,7 +2447,7 @@ Happy Writing! ✍️`;
 
             switch (tag) {
                 case 'BR':
-                    return '<hp:run charPrIDRef="' + hwpxCharIdFor(styles, fmt) + '"><hp:lineBreak/></hp:run>';
+                    return '<hp:run charPrIDRef="' + hwpxCharIdFor(styles, fmt) + '"><hp:t><hp:lineBreak/></hp:t></hp:run>';
                 case 'STRONG': case 'B':
                     fmt = Object.assign({}, fmt, { bold: true }); break;
                 case 'EM': case 'I':
@@ -2469,7 +2492,7 @@ Happy Writing! ✍️`;
          * 미리 수집한 이미지를 인라인 그림(hp:pic) 런으로 변환
          */
         function hwpxPicRun(img, state, styles) {
-            const data = state.images.get(img);
+            const data = state.images.get(img) || state.govImages?.get(img.getAttribute('data-hwpx-export-image'));
             if (!data) {
                 const alt = img.getAttribute('alt') || img.getAttribute('src') || '이미지';
                 return hwpxTextRun('[이미지: ' + alt + ']',
@@ -2693,7 +2716,8 @@ Happy Writing! ✍️`;
             if (colCount === 0) return '';
 
             // 미리보기에 렌더링된 실제 열 폭 비율 사용 (측정 불가 시 균등 분할)
-            let measured = Array.from(rows[0].cells).map(cell => cell.getBoundingClientRect().width);
+            let measured = Array.from(rows[0].cells).map(cell =>
+                cell.getBoundingClientRect().width || state.govCellWidths?.get(cell) || 0);
             while (measured.length < colCount) measured.push(0);
             const totalMeasured = measured.reduce((sum, w) => sum + w, 0);
             let widths;
@@ -2970,7 +2994,7 @@ Happy Writing! ✍️`;
 
         /* ----------------------------------------------------------
          * 개조식(정부 보고서) 변환 — 정부 문서 개조식 규격:
-         * HY헤드라인M 제목(상하 0.5mm 남색 괘선) + 우측 부제,
+         * HY헤드라인M 제목(연한 파란 바탕·상하 괘선) + 우측 부제,
          * ㅁ(0칸) / ㅇ(1칸) / -(2칸) 3단 걸어쓰기 + ※·*·**(4칸) 보충(맑은 고딕 회색),
          * 문단 여백 ㅁ 앞 5 pt·ㅇ 앞 6 pt·보충 앞 2 pt, (5)·(6)·(2) 여백 지정 줄,
          * 코드블럭에 붙여 넣은 개조식 평문 펼치기, 범위 '~' → '∼' 통일,
@@ -2979,9 +3003,13 @@ Happy Writing! ✍️`;
 
         // 걸어쓰기 문단 모양: 마커 폭만큼 내어쓰기
         function hwpxGovBulletPp(styles, level, width, prev, next) {
+            const left = HWPX_GOV.step * level + width;
             return styles.paraPr({
-                align: 'LEFT', left: HWPX_GOV.step * level + width, intent: -width,
-                prev: prev || 0, next: next || 0, ls: 160
+                align: level === 0 ? 'LEFT' : 'JUSTIFY', left, intent: -width,
+                tab: styles.tabPr(left), prev: prev || 0, next: next || 0, ls: 160,
+                keepWithNext: level === 0,
+                borderBf: level === 0 ? styles.bfGovSectionRule : styles.bfNone,
+                borderOff: level === 0 ? [0, 0, 300, 300] : [0, 0, 0, 0]
             });
         }
 
@@ -2993,17 +3021,23 @@ Happy Writing! ✍️`;
         // ※·* 보충 줄 문단 모양 — 부모 수준과 무관하게 ㅇ 본문 시작선에 맞춘다
         // (cont: ※ 갈래 둘째 줄처럼 마커 없이 앞 줄 본문에 이어 맞추는 경우)
         function hwpxGovNotePp(styles, width, prev, cont) {
+            // 두 글자 각주(**)도 탭 위치를 넘지 않도록 여유를 둔다.
+            width = Math.max(width, 1600);
             const x = HWPX_GOV.step + HWPX_GOV.wFull;
             return styles.paraPr({
-                align: 'LEFT', left: x + width, intent: cont ? 0 : -width, prev: prev || 0, ls: 160
+                align: 'LEFT', left: x + width, intent: cont ? 0 : -width,
+                tab: styles.tabPr(x + width), prev: prev || 0, ls: 150
             });
         }
 
         /**
-         * 개조식 문서 제목 — 「◈ 제목」 한 줄 (테두리 없음, 왼쪽 정렬, 검정 굵은 고딕)
+         * 개조식 문서 제목 — 연한 파란 바탕과 상하 괘선, 「◈ 제목」 검정 굵은 고딕
          */
         function hwpxGovTitle(h1, state, styles) {
-            const pp = styles.paraPr({ align: 'LEFT', prev: 200, next: 200, ls: 160 });
+            const pp = styles.paraPr({
+                align: 'LEFT', prev: 200, next: 500, ls: 150, keepWithNext: true,
+                borderBf: styles.bfGovTitleRule, borderOff: [200, 200, 300, 300]
+            });
             const fmt = { gov: true, size: HWPX_GOV.sz.title, font: HWPX_GOV.fonts.head, bold: true };
             const prefix = /^\s*◈/.test(h1.textContent) ? '' : hwpxTextRun('◈ ', hwpxCharIdFor(styles, fmt));
             const runs = hwpxInlineToRuns(h1, fmt, state, styles);
@@ -3011,14 +3045,14 @@ Happy Writing! ✍️`;
         }
 
         /**
-         * ㅁ 수준(과제 제목) 마커 — 번호 박스 「1」「2」… + 남색 굵은 고딕 본문
+         * ㅁ 수준(과제 제목) 마커 — 번호 박스 「1」「2」… + 검정 굵은 고딕 본문
          */
         function hwpxGovLevel0(state, styles) {
             state.govNumber = (state.govNumber || 0) + 1;
             return {
                 marker: String(state.govNumber),
-                markerFmt: { gov: true, size: HWPX_GOV.sz.numBox, font: HWPX_GOV.fonts.head, bold: true, shadeBf: styles.bfGovNumBox },
-                fmt: { gov: true, size: HWPX_GOV.sz.h0, font: HWPX_GOV.fonts.head, bold: true, color: HWPX_GOV.colors.title }
+                markerFmt: { gov: true, size: HWPX_GOV.sz.numBox, font: HWPX_GOV.fonts.body, shadeBf: styles.bfGovNumBox },
+                fmt: { gov: true, size: HWPX_GOV.sz.h0, font: HWPX_GOV.fonts.gothic, bold: true }
             };
         }
 
@@ -3030,7 +3064,7 @@ Happy Writing! ✍️`;
         }
         function hwpxGovLabelFmt(level) {
             return level <= 1
-                ? { gov: true, size: HWPX_GOV.sz.body, font: HWPX_GOV.fonts.head, bold: true, color: HWPX_GOV.colors.label }
+                ? { gov: true, size: HWPX_GOV.sz.body, font: HWPX_GOV.fonts.body, bold: true, color: HWPX_GOV.colors.label }
                 : { gov: true, size: HWPX_GOV.sz.body, font: HWPX_GOV.fonts.body, bold: true };
         }
 
@@ -3059,6 +3093,73 @@ Happy Writing! ✍️`;
             const m = HWPX_GOV.labelRe.exec(text);
             if (!m || !labelFmt) return { runs: '', rest: text };
             return { runs: hwpxTextRun('(' + m[1] + ') ', hwpxCharIdFor(styles, labelFmt)), rest: text.slice(m[0].length) };
+        }
+
+        // 접두어를 여러 인라인 노드에 걸쳐 지우되 나머지 굵기·기울임·링크를 보존한다.
+        function hwpxGovRemoveTextPrefix(node, length) {
+            for (const child of Array.from(node.childNodes)) {
+                if (!length) break;
+                if (child.nodeType === Node.TEXT_NODE) {
+                    const take = Math.min(length, child.textContent.length);
+                    child.textContent = child.textContent.slice(take);
+                    length -= take;
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                    length = hwpxGovRemoveTextPrefix(child, length);
+                }
+            }
+            return length;
+        }
+
+        // 개조식 줄이 한 p 안에 <br>로 들어온 경우 실제 문단으로 나눈다.
+        // cloneContents를 사용해 줄 중간의 bold/em/link와 원래 미리보기를 보존한다.
+        function hwpxGovPrepareRoot(root, state) {
+            const copy = root.cloneNode(true);
+            // 이미지의 로드 상태와 셀의 실제 폭은 detached clone에 복제되지 않는다.
+            // 원본에서 먼저 수집한 값만 사용하고, 미리보기 DOM에는 속성을 추가하지 않는다.
+            const sourceImages = Array.from(root.querySelectorAll('img'));
+            copy.querySelectorAll('img').forEach((img, i) => {
+                img.removeAttribute('data-hwpx-export-image');
+                const data = state.images.get(sourceImages[i]);
+                if (data) {
+                    img.setAttribute('data-hwpx-export-image', data.itemId);
+                    state.govImages.set(data.itemId, data);
+                }
+            });
+            const sourceCells = Array.from(root.querySelectorAll('th, td'));
+            copy.querySelectorAll('th, td').forEach((cell, i) => {
+                state.govCellWidths.set(cell, sourceCells[i].getBoundingClientRect().width);
+            });
+            copy.querySelectorAll('p').forEach(p => {
+                if (p.closest('li, table, pre')) return;
+                const breaks = Array.from(p.querySelectorAll('br'));
+                if (!breaks.length) return;
+                const lines = [];
+                let start = null;
+                for (const end of [...breaks, null]) {
+                    const range = p.ownerDocument.createRange();
+                    if (start) range.setStartAfter(start); else range.setStart(p, 0);
+                    if (end) range.setEndBefore(end); else range.setEnd(p, p.childNodes.length);
+                    const line = p.ownerDocument.createElement('p');
+                    line.appendChild(range.cloneContents());
+                    lines.push(line);
+                    start = end;
+                }
+                const isStart = line => HWPX_GOV.lineRe.test(line.textContent)
+                    || HWPX_GOV.spacerRe.test(line.textContent.trim());
+                if (!lines.some(isStart)) return;
+                const groups = [];
+                for (const line of lines) {
+                    if (!line.textContent.trim() && !line.querySelector('img')) continue;
+                    if (!groups.length || isStart(line)) groups.push(line);
+                    else {
+                        const last = groups[groups.length - 1];
+                        last.appendChild(p.ownerDocument.createElement('br'));
+                        while (line.firstChild) last.appendChild(line.firstChild);
+                    }
+                }
+                if (groups.length > 1) p.replaceWith(...groups);
+            });
+            return copy;
         }
 
         /**
@@ -3103,7 +3204,8 @@ Happy Writing! ✍️`;
                 const spaceFmt = Object.assign({}, opts.markerFmt);
                 delete spaceFmt.shadeBf;
                 markerRun = hwpxTextRun(opts.marker, hwpxCharIdFor(styles, opts.markerFmt))
-                    + hwpxTextRun(' ', hwpxCharIdFor(styles, spaceFmt));
+                    + '<hp:run charPrIDRef="' + hwpxCharIdFor(styles, spaceFmt) + '">'
+                    + '<hp:t><hp:tab width="0" leader="0" type="1"/></hp:t></hp:run>';
             }
             return hwpxParagraph(state, pp, markerRun + opts.bodyRuns);
         }
@@ -3280,6 +3382,7 @@ Happy Writing! ✍️`;
                 let marker, level, width;
                 let markerFmt = null;
                 let bodyBase = { gov: true, size: HWPX_GOV.sz.body, font: HWPX_GOV.fonts.body };
+                let labelFmt = null;
                 let strip = null;
                 const mGov = HWPX_GOV.markerRe.exec(liText);
                 const mArrow = HWPX_GOV.arrowRe.exec(liText);
@@ -3310,16 +3413,23 @@ Happy Writing! ✍️`;
                     bodyBase = l0.fmt;
                 } else if (!ordered) {
                     bodyBase = hwpxGovBodyFmt(level);
-                    state.govLabelFmt = mArrow ? null : hwpxGovLabelFmt(level);
+                    labelFmt = mArrow ? null : hwpxGovLabelFmt(level);
                 }
                 if (!markerFmt) markerFmt = bodyBase;
                 const ppCont = styles.paraPr({
                     align: 'LEFT', left: HWPX_GOV.step * level + width, next: 0, ls: 160
                 });
                 let firstParagraphDone = false;
-                let inlineBuffer = '';
+                let inlineNodes = [];
                 const flushInline = () => {
-                    if (inlineBuffer.trim() === '' && firstParagraphDone) { inlineBuffer = ''; return; }
+                    if (!inlineNodes.length && firstParagraphDone) return;
+                    const inlineRoot = list.ownerDocument.createElement('span');
+                    inlineNodes.forEach(child => inlineRoot.appendChild(child.cloneNode(true)));
+                    state.stripPrefixRe = firstParagraphDone ? null : strip;
+                    state.govLabelFmt = firstParagraphDone ? null : labelFmt;
+                    const inlineBuffer = hwpxInlineToRuns(inlineRoot, bodyBase, state, styles);
+                    state.stripPrefixRe = null;
+                    state.govLabelFmt = null;
                     if (!firstParagraphDone) {
                         xml += hwpxGovMarkerPara(state, styles, {
                             marker, level, width, markerFmt, bodyRuns: inlineBuffer,
@@ -3328,13 +3438,13 @@ Happy Writing! ✍️`;
                         // 하위 목록·※·*는 이 항목의 다음 수준에서 이어진다
                         state.govLastLevel = level;
                         state.govAutoBase = Math.min(level + 1, 3);
+                        state.govLastMarker = marker;
                     } else {
                         xml += hwpxParagraph(state, ppCont, inlineBuffer);
                     }
-                    inlineBuffer = '';
+                    inlineNodes = [];
                     firstParagraphDone = true;
                 };
-                if (strip) state.stripPrefixRe = strip;
                 li.childNodes.forEach(child => {
                     const childTag = child.nodeType === Node.ELEMENT_NODE ? child.tagName : null;
                     if (childTag === 'UL' || childTag === 'OL') {
@@ -3342,7 +3452,7 @@ Happy Writing! ✍️`;
                         xml += hwpxGovListToXml(child, depth + 1, state, styles, ctx);
                     } else if (childTag === 'P') {
                         child.childNodes.forEach(grandchild => {
-                            inlineBuffer += hwpxInlineToRuns(grandchild, bodyBase, state, styles);
+                            inlineNodes.push(grandchild);
                         });
                         flushInline();
                     } else if (childTag === 'PRE') {
@@ -3356,13 +3466,14 @@ Happy Writing! ✍️`;
                         xml += hwpxGovBlocksToXml(child, state, styles,
                             Object.assign({}, ctx, { quoteDepth: (ctx.quoteDepth || 0) + 1 }));
                     } else {
-                        inlineBuffer += hwpxInlineToRuns(child, bodyBase, state, styles);
+                        if (child.nodeType !== Node.TEXT_NODE || child.textContent.trim()) inlineNodes.push(child);
                     }
                 });
                 state.stripPrefixRe = null;
                 state.govLabelFmt = null;
-                if (!firstParagraphDone || inlineBuffer.trim() !== '') flushInline();
+                if (!firstParagraphDone || inlineNodes.length) flushInline();
                 state.govLastLevel = level;
+                state.govAutoBase = Math.min(level + 1, 3);
                 if (ordered) index++;
             });
             return xml;
@@ -3380,6 +3491,7 @@ Happy Writing! ✍️`;
 
                 if (tag === 'H1') {
                     xml += hwpxGovTitle(node, state, styles);
+                    state.govLastMarker = null;
                     state.govAfterTitle = true;
                     state.govLastLevel = 1;
                     state.govAutoBase = 1;
@@ -3398,6 +3510,7 @@ Happy Writing! ✍️`;
                 state.govAfterTitle = false;
 
                 if (/^H[2-6]$/.test(tag)) {
+                    state.govLastMarker = null;
                     const text = node.textContent.trim();
                     // 붙임/참고 헤딩은 배너로
                     const mAttach = HWPX_GOV.attachRe.exec(text);
@@ -3410,10 +3523,10 @@ Happy Writing! ✍️`;
                         xml += hwpxGovAttachBanner(state, styles, (mAttach[1] + mAttach[2]).trim(), titleRuns);
                         return;
                     }
-                    // H2=ㅁ 16pt, H3=ㅇ 15pt, H4=- 14pt, H5=· 13.5pt, H6=◦ 13pt
+                    // H2=번호 상자 16pt, H3=○ 15pt, H4=- 14pt, H5=· 13.5pt, H6=◦ 12pt
                     const spec = {
                         H2: ['ㅁ', 0, HWPX_GOV.sz.h0, HWPX_GOV.wFull],
-                        H3: ['ㅇ', 1, HWPX_GOV.sz.body, HWPX_GOV.wFull],
+                        H3: ['○', 1, HWPX_GOV.sz.body, HWPX_GOV.wFull],
                         H4: ['-', 2, HWPX_GOV.sz.body - 100, HWPX_GOV.wHalf],
                         H5: ['·', 3, HWPX_GOV.sz.body - 150, HWPX_GOV.wHalf],
                         H6: ['◦', 3, HWPX_GOV.sz.note, HWPX_GOV.wFull]
@@ -3497,7 +3610,7 @@ Happy Writing! ✍️`;
                             });
                             break;
                         }
-                        const mGov = HWPX_GOV.markerRe.exec(text);
+                        const mGov = /^([ㅁ□■ㅇ○◯❍▸‣▹·•◦▪-])\s+/.exec(text);
                         if (mGov) {
                             const marker = mGov[1];
                             const level = HWPX_GOV.markers[marker][0];
@@ -3622,10 +3735,11 @@ Happy Writing! ✍️`;
             const charProperties = '<hh:charProperties itemCnt="' + (7 + styles.custom.charPr.length) + '">'
                 + baseCharPrs + styles.custom.charPr.join('') + '</hh:charProperties>';
 
-            const tabProperties = '<hh:tabProperties itemCnt="3">'
+            const tabProperties = '<hh:tabProperties itemCnt="' + (3 + styles.custom.tabPr.length) + '">'
                 + '<hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/>'
                 + '<hh:tabPr id="1" autoTabLeft="1" autoTabRight="0"/>'
-                + '<hh:tabPr id="2" autoTabLeft="0" autoTabRight="1"/></hh:tabProperties>';
+                + '<hh:tabPr id="2" autoTabLeft="0" autoTabRight="1"/>'
+                + styles.custom.tabPr.join('') + '</hh:tabProperties>';
 
             const numberings = '<hh:numberings itemCnt="1"><hh:numbering id="1" start="0">'
                 + [['DIGIT', '^1.'], ['HANGUL_SYLLABLE', '^2.'], ['DIGIT', '^3)'], ['HANGUL_SYLLABLE', '^4)'],
@@ -3771,6 +3885,8 @@ Happy Writing! ✍️`;
                 media: [],
                 binItems: [],
                 images: new Map(),
+                govImages: new Map(),
+                govCellWidths: new Map(),
                 paraId: 1000,
                 objectId: 1697000000,
                 chapterCounter: 0,
@@ -3786,6 +3902,7 @@ Happy Writing! ✍️`;
             };
             const styles = hwpxCreateStyles();
             await hwpxCollectImages(root, state);
+            if (gov) root = hwpxGovPrepareRoot(root, state);
             const bodyXml = (gov
                 ? hwpxGovBlocksToXml(root, state, styles, {})
                 : hwpxBlocksToXml(root, state, styles, {}))
