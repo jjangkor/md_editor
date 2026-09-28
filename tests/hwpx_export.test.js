@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'md_editor.html'), 'utf8');
 
-test('HWPX export produces a real OWPML package, sharing the store-only ZIP writer', () => {
+test('HWPX export produces a real OWPML package, sharing the ZIP writer', () => {
     assert.match(html, /application\/hwp\+zip/);
     assert.match(html, /buildHwpxFromPreview/);
     assert.match(html, /docxBuildZip\(files\)/); // ZIP 패키저 재사용
@@ -80,7 +80,7 @@ test('government(개조식) theme matches the agenda-style reference document', 
     assert.match(html, /autoMarkers: \[\['ㅁ', 1100\], \['ㅇ', 1100\], \['-', 600\], \['·', 600\]\]/);
     assert.match(html, /govAutoBase/);
     // ※ 참조·*/** 각주는 부모 수준과 무관하게 ㅇ 본문 시작선의 보충 줄, 앞 여백 2 pt
-    assert.match(html, /const x = HWPX_GOV\.step \+ HWPX_GOV\.wFull;/);
+    assert.match(html, /const x = HWPX_GOV\.step \+ hwpxGovLevelHang\(1\);/);
     assert.match(html, /\/\^\(\\\*\\\*\|\\\*\)\\s\//);
     assert.match(html, /hwpxGovNotePp/);
     assert.match(html, /prevNote: 200/);

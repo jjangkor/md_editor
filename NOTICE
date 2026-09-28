@@ -1,0 +1,59 @@
+JJANG's MD Editor — 제3자 고지 (Third-party notices)
+
+이 편집기의 한글(.hwpx)·Word 내보내기와 표기·문체 검사 일부는 아래 MIT 라이선스
+프로젝트의 규칙·구현을 참고해 브라우저용 JavaScript로 옮겨 적었습니다.
+
+================================================================================
+
+kordoc
+https://github.com/chrisryugj/kordoc
+
+Copyright (c) 2026 chrisryugj
+Licensed under the MIT License
+
+참고·이식한 부분 (md_editor.html):
+- LaTeX → 한/글 수식 편집기 스크립트 변환 규칙과 hp:equation 구조
+  (src/hwpx/equation-generate.ts)
+- 2행 이상 표의 부유 배치(treatAsChar=0)로 쪽 나눔 허용 (src/hwpx/gen-table.ts)
+- 부호 뒤 탭 + 자동 탭(autoTabLeft) 내어쓰기 정렬 (src/hwpx/gen-marker.ts, gen-header.ts)
+- 날짜·금액 묶음 빈칸(hp:nbSpace) 규칙 (src/hwpx/gongmun-typo.ts)
+- 개요(OUTLINE) 제목 문단과 빈 번호 서식 (src/hwpx/gen-header.ts)
+- 한/글 하이퍼링크 필드·각주 개체 구조 (src/hwpx/md-runs.ts)
+- 공문서 표기법 검사 규칙·외래어·순화어 사전 (src/hwpx/gongmun-lint.ts)
+- 개조식 보고서 문체 검사 규칙 (src/hwpx/munche-lint.ts)
+- HWPX 패키지 검증 항목 (src/validate.ts)
+- ```chart 펜스 규약 (src/hwpx/chart-gen.ts)
+
+================================================================================
+
+claw-hwp
+https://github.com/DoHyun468/claw-hwp
+
+Copyright (c) 2026 DoHyun468
+Licensed under the MIT License
+
+참고·이식한 부분 (kordoc을 거쳐):
+- OOXML chartSpace 조립과 차트 종류 표 (kordoc src/hwpx/chart-gen.ts)
+- HWPX 패키지 검사 항목 (kordoc src/validate.ts)
+
+================================================================================
+
+MIT License (위 두 프로젝트 공통 조항)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
