@@ -57,19 +57,23 @@ test('merged cells (colspan/rowspan) survive in HWPX and DOCX', async () => {
     assert.match(doc, /<w:vMerge\/>/);
 });
 
-test('개조식 markers are followed by a tab and hang at the marker width', async () => {
-    const md = '# 보고\n\n```\nㅁ 과제\n  ㅇ (라벨) 본문\n    - 세부\n※ 참고\n```\n';
-    const pkg = await h.exportHwpx(md, 'gov');
-    const sec = pkg.text('Contents/section0.xml');
-    const header = pkg.text('Contents/header.xml');
-    // 탭은 <hp:t> 안에 둔다
-    assert.equal(count(sec, /<hp:t><hp:tab width="\d+" leader="0" type="1"\/><\/hp:t>/g), 4);
-    assert.doesNotMatch(sec, /<\/hp:t><hp:tab/);
-    // ㅇ 줄 문단: 자동 탭(tabPr 1) + 내어쓰기 ≥ ㅇ 글자 폭(15pt = 1500)
-    const para = sec.match(/<hp:p [^>]*paraPrIDRef="(\d+)"[^>]*><hp:run charPrIDRef="\d+"><hp:t>ㅇ<\/hp:t>/);
-    const pp = header.match(new RegExp('<hh:paraPr id="' + para[1] + '" tabPrIDRef="(\\d)"[\\s\\S]*?<hc:intent value="(-?\\d+)"'));
-    assert.equal(pp[1], '1');
-    assert.ok(-parseInt(pp[2], 10) >= 1500, 'hang ' + pp[2]);
+test('개조식·서술식 markers are followed by a tab at the hanging-indent tab stop', async () => {
+    for (const [theme, md] of [['gov', '# 보고\n\n```\nㅁ 과제\n  ㅇ (라벨) 본문\n    - 세부\n※ 참고\n```\n'], ['book', '- 항목\n  - 하위\n\n1. 번호\n']]) {
+        const pkg = await h.exportHwpx(md, theme);
+        const sec = pkg.text('Contents/section0.xml');
+        const header = pkg.text('Contents/header.xml');
+        // 탭은 <hp:t> 안에 둔다
+        assert.doesNotMatch(sec, /<\/hp:t><hp:tab/);
+        const tabbed = sec.match(/<hp:p [^>]*paraPrIDRef="\d+"[^>]*>(?:(?!<\/hp:p>)[\s\S])*?<hp:tab /g) || [];
+        assert.ok(tabbed.length >= 3, theme + ' ' + tabbed.length);
+        tabbed.forEach(p => {
+            const ppId = /paraPrIDRef="(\d+)"/.exec(p)[1];
+            const pp = new RegExp('<hh:paraPr id="' + ppId + '" tabPrIDRef="(\\d+)"[\\s\\S]*?<hc:left value="(\\d+)"').exec(header);
+            const tabItem = new RegExp('<hh:tabPr id="' + pp[1] + '"[^>]*><hh:tabItem pos="(\\d+)"').exec(header);
+            assert.ok(tabItem, theme + ' tabPr ' + pp[1]);
+            assert.equal(tabItem[1], pp[2], theme + ': tab stop = hanging indent');
+        });
+    }
 });
 
 test('dates, amounts and ranges are bound with non-breaking spaces', async () => {
@@ -194,11 +198,11 @@ test('images keep their original bytes (JPEG stays JPEG)', async () => {
     });
     const unzipHwpx = h.unzip(await window.eval('buildHwpxFromPreview')(preview, 't', 'book'));
     const names = unzipHwpx.map(e => e.name);
-    assert.ok(names.includes('BinData/image1.jpg'), names.join());
-    assert.ok(names.includes('BinData/image2.png'));
-    assert.equal(unzipHwpx.find(e => e.name === 'BinData/image1.jpg').data[0], 0xFF);
+    assert.ok(names.includes('BinData/BIN0001.jpg'), names.join());
+    assert.ok(names.includes('BinData/BIN0002.png'));
+    assert.equal(unzipHwpx.find(e => e.name === 'BinData/BIN0001.jpg').data[0], 0xFF);
     const sec = unzipHwpx.find(e => e.name === 'Contents/section0.xml').text();
-    assert.equal(count(sec, /<hc:img binaryItemIDRef="image\d"/g), 2);
+    assert.equal(count(sec, /<hc:img binaryItemIDRef="BIN\d{4}"/g), 2);
     // 그림 개체 instid는 다른 개체 id와 겹치지 않는다
     const ids = (sec.match(/ id="(\d{7,})"/g) || []).map(x => x.replace(/\D/g, ''));
     const instids = (sec.match(/instid="(\d+)"/g) || []).map(x => x.replace(/\D/g, ''));
