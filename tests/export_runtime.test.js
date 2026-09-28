@@ -137,6 +137,17 @@ test('footnotes render in preview and export as real notes', async () => {
     assert.match(dx.text('[Content_Types].xml'), /footnotes\+xml/);
 });
 
+test('a footnote cited twice gets one Word note per reference (Word crashes on shared ids)', async () => {
+    const dx = await h.exportDocx('앞[^a] 뒤[^a]\n\n[^a]: 같은 출처\n');
+    const doc = dx.text('word/document.xml');
+    const ids = [...doc.matchAll(/<w:footnoteReference w:id="(\d+)"\/>/g)].map(m => m[1]);
+    assert.deepEqual(ids, ['1', '2']);
+    const notes = dx.text('word/footnotes.xml');
+    assert.equal(count(notes, /<w:footnote w:id="[12]">[\s\S]*?같은 출처/g), 2);
+    assert.match(dx.text('word/settings.xml'), /<w:footnotePr><w:footnote w:id="-1"\/><w:footnote w:id="0"\/><\/w:footnotePr><w:compat>/);
+    assert.deepEqual(dx.xmlErrors(), []);
+});
+
 test('external links become Hangul hyperlink fields', async () => {
     const pkg = await h.exportHwpx('[가이드](https://example.com/a?b=1&c=2)\n', 'book');
     const sec = pkg.text('Contents/section0.xml');
