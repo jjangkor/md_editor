@@ -14,15 +14,18 @@ test('inline JavaScript is syntactically valid', () => {
 });
 
 test('rendered Markdown and sidebar TOC use the sanitized paths', () => {
-  assert.match(html, /DOMPurify\.sanitize\(marked\.parse\(text\)/);
+  assert.match(html, /const parsed = marked\.parse\(text\);/);
+  assert.match(html, /DOMPurify\.sanitize\(parsed \+ footnotesHtml\(\)/);
   assert.doesNotMatch(html, /sanitize:\s*false/);
   assert.match(html, /link\.textContent = text/);
   assert.doesNotMatch(html, /tocContent\.innerHTML = tocHTML/);
 });
 
 test('TOC links and preview headings share deterministic IDs', () => {
-  assert.ok(html.includes('const id = `heading-${headings.length}`;'));
+  // 목차 생성과 미리보기 제목 id가 같은 순서(marked 렉서)로 매겨진다
+  assert.ok(html.includes('Object.assign(heading, { id: `heading-${index}` })'));
   assert.ok(html.includes('const id = `heading-${index}`;'));
+  assert.match(html, /function collectMarkdownHeadings\(markdownText\)/);
 });
 
 test('math parsing preserves currency and protects code segments', () => {

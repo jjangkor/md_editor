@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'md_editor.html'), 'utf8');
 
-test('HWPX export produces a real OWPML package, sharing the store-only ZIP writer', () => {
+test('HWPX export produces a real OWPML package, sharing the ZIP writer', () => {
     assert.match(html, /application\/hwp\+zip/);
     assert.match(html, /buildHwpxFromPreview/);
     assert.match(html, /docxBuildZip\(files\)/); // ZIP 패키저 재사용

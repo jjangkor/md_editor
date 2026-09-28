@@ -17,7 +17,8 @@ async function exportDocument(markdown, theme = 'gov', prepare) {
     const original = root.innerHTML;
     const context = vm.createContext({
         Node: dom.window.Node, document: dom.window.document,
-        atob: dom.window.atob.bind(dom.window), TextEncoder, console
+        atob: dom.window.atob.bind(dom.window), TextEncoder, TextDecoder,
+        DOMParser: dom.window.DOMParser, console
     });
     vm.runInContext(exporters, context);
     const bytes = Buffer.from(await context.buildHwpxFromPreview(root, '서식 검증', theme));
