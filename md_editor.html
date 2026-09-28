@@ -2116,8 +2116,9 @@ Happy Writing! ✍️`;
             if (tag === 'SUP' && node.classList.contains('footnote-ref')) {
                 const n = parseInt(node.getAttribute('data-fn'), 10);
                 if (!n || state.inFootnote) return '';
-                if (!state.footnotes.includes(n)) state.footnotes.push(n);
-                return '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="' + n + '"/></w:r>';
+                // Word는 각주 하나를 본문 두 곳에서 참조하면 열다가 멈추므로 참조마다 각주를 따로 만든다
+                state.footnotes.push(n);
+                return '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="' + state.footnotes.length + '"/></w:r>';
             }
 
             switch (tag) {
@@ -2702,14 +2703,14 @@ Happy Writing! ✍️`;
             const separator = (id, type, el) => '<w:footnote w:type="' + type + '" w:id="' + id + '"><w:p><w:pPr>'
                 + '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:' + el + '/></w:r></w:p></w:footnote>';
             state.inFootnote = true;
-            const notes = state.footnotes.map(n => {
+            const notes = state.footnotes.map((n, index) => {
                 const li = root.querySelector('section.footnotes li[data-fn="' + n + '"]');
                 let runs = '';
                 if (li) li.childNodes.forEach(child => {
                     if (child.nodeType === Node.ELEMENT_NODE && child.classList.contains('footnote-back')) return;
                     runs += docxInlineToRuns(child, {}, state);
                 });
-                return '<w:footnote w:id="' + n + '"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>'
+                return '<w:footnote w:id="' + (index + 1) + '"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>'
                     + '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>'
                     + '<w:r><w:t xml:space="preserve"> </w:t></w:r>' + runs + '</w:p></w:footnote>';
             }).join('');
@@ -2965,7 +2966,10 @@ Happy Writing! ✍️`;
                 { name: 'word/_rels/document.xml.rels', data: documentRels },
                 { name: 'word/styles.xml', data: DOCX_STYLES_XML },
                 { name: 'word/numbering.xml', data: numberingXml },
-                { name: 'word/settings.xml', data: DOCX_SETTINGS_XML },
+                { name: 'word/settings.xml', data: footnotesXml
+                    // 각주 구분선(-1·0)을 설정에서 가리킨다 — Word가 직접 저장하는 형태
+                    ? DOCX_SETTINGS_XML.replace('<w:compat>', '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr><w:compat>')
+                    : DOCX_SETTINGS_XML },
                 { name: 'word/footer1.xml', data: DOCX_FOOTER_XML },
                 { name: 'word/fontTable.xml', data: DOCX_FONT_TABLE_XML },
                 { name: 'word/theme/theme1.xml', data: DOCX_THEME_XML },
